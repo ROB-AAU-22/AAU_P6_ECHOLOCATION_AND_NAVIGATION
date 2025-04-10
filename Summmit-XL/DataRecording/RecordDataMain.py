@@ -71,16 +71,11 @@ def generate_batch():
     # Create a directory for this batch
     batch_directory = create_batch_directory(FILE_DIR, batch_id)
 
-    # Separate the left and right channels
-    left_channel, right_channel = recorded_signal[:, 0], recorded_signal[:, 1]
-
     # Define file paths within the batch directory
-    left_file_path = os.path.join(batch_directory, DATASET_SOUND_FILE.format(batch_id))
-    right_file_path = os.path.join(batch_directory, DATASET_RIGHT_FILE.format(batch_id))
+    file_path = os.path.join(batch_directory, DATASET_SOUND_FILE.format(batch_id))
 
     # Save the left and right audio channels as separate audio files
-    write(left_file_path, SAMPLE_RATE, left_channel)
-    write(right_file_path, SAMPLE_RATE, right_channel)
+    write(file_path, SAMPLE_RATE, recorded_signal)
 
     # --- STEP 2: Fetch LiDAR data and calculate angles ---
     # Use the LaserScanListener to receive and process LiDAR data
@@ -103,8 +98,7 @@ def generate_batch():
     # --- STEP 3: Create a configuration file ---
     # Prepare metadata with filenames and LiDAR data
     config_data = {
-        "soundfile_left": left_file_path,  # Path to the left channel audio
-        "soundfile_right": right_file_path,  # Path to the right channel audio
+        "soundfile": file_path,  # Path to the audio file
         "LiDAR_angle": angle_file_path,  # LiDAR angle data path
         "LiDAR_distance": distance_file_path,  # LiDAR distance data path
     }
