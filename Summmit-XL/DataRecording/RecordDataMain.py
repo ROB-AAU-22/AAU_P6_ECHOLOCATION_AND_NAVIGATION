@@ -12,13 +12,13 @@ from scipy.io.wavfile import write
 NUM_SWEEPS = 1
 FILE_DIR = 'datasets/'
 CHIRP_FILE = 'chirps/Chirps{}/chirp_{}_{}ms.wav'
-REC_DURATION = 0.5
+REC_DURATION = 0.6
 SAMPLE_RATE = 96000
 DATASET_SOUND_FILE = "{}_sound.wav"
 DATASET_DISTANCE_FILE = "{}_distance_data.json"
 DATASET_ANGLE_FILE = "{}_angle_data.json"
 CONFIG_FILE = "{}_config.json"
-WAIT = 5
+WAIT = 0
 
 CHIRPS_CONFIG = {
     "durations_ms": {
@@ -39,7 +39,7 @@ CHIRPS_CONFIG = {
 
 
 # Initialize LaserScanListener
-# laser_scan_listener = LaserScanListener(FILE_DIR)
+laser_scan_listener = LaserScanListener(FILE_DIR)
 
 
 def generate_sweep_signal(freq_name, freq_range, duration_value):
@@ -55,7 +55,7 @@ def generate_sweep_signal(freq_name, freq_range, duration_value):
 
     # pad signal to add 1 second to before and after
     zero_padding = np.zeros(int(round(SAMPLE_RATE * REC_DURATION)))
-    extended_signal = np.concatenate((zero_padding, sweep_signal, zero_padding))
+    extended_signal = np.concatenate((sweep_signal, zero_padding))
 
     # Duplicate the channel for stereo playback
     stereo_sweep_signal = np.column_stack((extended_signal, extended_signal)).astype(np.float32)
@@ -72,7 +72,7 @@ def create_batch_directory(base_dir, batch_id):
     Ensures the directory exists before returning the path.
     """
     batch_directory = os.path.join(base_dir, batch_id)
-    os.makedirs(batch_directory)  # , exist_ok=True)
+    os.makedirs(batch_directory, exist_ok=True)
     return batch_directory
 
 
@@ -83,7 +83,8 @@ def generate_batch():
     2. Fetching and saving LiDAR data.
     3. Writing a configuration file with metadata for the batch.
     """
-    timestamp = int(time.time())
+    time_start = time.time()
+    timestamp = int(time_start)
     completed_batches = []
 
     for duration_name, duration_value in CHIRPS_CONFIG["durations_ms"].items():
@@ -102,7 +103,7 @@ def generate_batch():
                 if os.path.exists(config_dir_path) else 1
             batch_id = f"{int(timestamp)}_{subdirectory_count}_{freq_name}_{duration_name}"
 
-            print(f"Generating batch: {batch_id}")
+            #print(f"Generating batch: {batch_id}")
 
             # --- STEP 1: Record stereo audio ---
             # Record the stereo sweep signal
@@ -128,7 +129,7 @@ def generate_batch():
                 "config_angle": config_angle,
             })
 
-    print("Done recording batches, saving data...")
+    #print("Done recording batches, saving data...")
 
     for batch in completed_batches:
         # Create a directory for this batch
@@ -161,9 +162,9 @@ def generate_batch():
         with open(config_file_path, 'w') as config_file:
             json.dump(config_data, config_file, indent=4)
 
-        print("Batch saved: {}".format(batch["batch_id"]))
+        #print("Batch saved: {}".format(batch["batch_id"]))
 
-    print("Entire batch saved: {}_{}".format(timestamp, subdirectory_count))
+    print("Entire batch saved in {} seconds: {}_{}".format(int(time.time() - time_start), timestamp, subdirectory_count))
 
 
 if __name__ == '__main__':
