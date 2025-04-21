@@ -42,14 +42,20 @@ def build_dataset_from_csv(csv_file, dataset_root):
     
     feature_cols = [col for col in df.columns if col != "filename"]
     
+    # Set of sample numbers to skip
+    skip_ids = {"1", "10", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "527", "538", "645", "668", "686", "697", "713"}  # Add more as needed
+    
     for idx, row in df.iterrows():
         filename = row["filename"]
-        try:
-            # Extract timestamp (e.g., 1744104210) from the filename
-            timestamp = filename.split('_')[0]
-        except Exception as e:
-            print(f"Error parsing timestamp from filename '{filename}': {e}. Skipping row.")
+        
+        if any(f"_{sid}_" in filename for sid in skip_ids):
+            print(f"Skipping file due to skip list: {filename}")
             continue
+        
+        lidar_filename = f"{filename}_distance_data.json"
+        lidar_file = os.path.join(dataset_root, filename, lidar_filename)
+
+        print(f"Processing file: {filename}")
 
         feature_vector = []
         feature_names_row = []
@@ -78,21 +84,21 @@ def build_dataset_from_csv(csv_file, dataset_root):
         if idx == 0:
             feature_names_full = feature_names_row
 
-        lidar_file = os.path.join(dataset_root, timestamp, f"{timestamp}_distance_data.json")
         if not os.path.exists(lidar_file):
-            print(f"LiDAR file {lidar_file} not found. Skipping sample {timestamp}.")
+            print(f"LiDAR file {lidar_file} not found. Skipping sample {filename}.")
             continue
+
         try:
             with open(lidar_file, "r") as f:
                 lidar_data = json.load(f)
             lidar_vector = np.array(lidar_data["LiDAR_distance"], dtype=float)
         except Exception as e:
-            print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {timestamp}.")
+            print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
             continue
 
         X_list.append(feature_vector)
         Y_list.append(lidar_vector)
-        sample_ids.append(timestamp)
+        sample_ids.append(filename)
 
     X = np.array(X_list)
     Y = np.array(Y_list)
@@ -196,28 +202,56 @@ def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
 
     return importances
 
-# ---------------------------
-# Main Function (with Hyperparameter Tuning)
-# ---------------------------
-def main():
-    # Paths for dataset
-    csv_file = os.path.join("Extracted features", "features_all_normalized.csv")
-    dataset_root = os.path.join("dataset_2")
+def save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, device, feature_names_full, num_epochs, num_layers):
+    # compute feature importance
+    importances = compute_permutation_importance(best_model, X_val, Y_val, loss_fn, device)
     
-    # Build dataset (X: audio features, Y: LiDAR scan)
-    X, Y, sample_ids, feature_names_full = build_dataset_from_csv(csv_file, dataset_root)
+    # save feature importance to csv
+    importance_df = pd.DataFrame({
+        "Feature": feature_names_full,
+        "Importance": importances
+    })
+    importance_df.sort_values(by="Importance", ascending=False, inplace=True)
+    
+    base_file_dir = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "feature_importance", chosen_dataset)
+    os.makedirs(base_file_dir, exist_ok=True)
+    
+    base_filename = f"feature_importance_{num_epochs}_{num_layers}"
+    counter = 1
+    file_extension = ".csv"
+    importance_file = os.path.join(base_file_dir, f"{base_filename}{file_extension}")
+    
+    while os.path.exists(importance_file):
+        importance_file = os.path.join(base_file_dir, f"{base_filename}_{counter}{file_extension}")
+        counter += 1
+        
+    importance_df.to_csv(importance_file, index=False)
+    print(f"Feature importances saved to {importance_file}")
+
+def model_training(dataset_root_directory, chosen_dataset):
+    # Placeholder function for training the model.
+    # This should be replaced with the actual training logic.
+    csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset + "_features_all_normalized.csv")
+    
+    X, Y, sample_ids, feature_names_full = build_dataset_from_csv(csv_file, dataset_root_directory)
     if X.shape[0] == 0:
         print("No valid samples found. Exiting.")
         return
     print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features, LiDAR scan length: {Y.shape[1]}")
     
-    # Split dataset into train (70%), validation (15%), and test (15%)
-    X_train_val, X_test, Y_train_val, Y_test = train_test_split(
-        X, Y, test_size=0.15, random_state=42)
-    X_train, X_val, Y_train, Y_val = train_test_split(
-        X_train_val, Y_train_val, test_size=0.1765, random_state=42)  # 0.1765*0.85 ~ 15%
+    print("Checking for NaNs or Infs...")
+    print("X contains NaNs:", np.isnan(X).any())
+    print("X contains Infs:", np.isinf(X).any())
+    print("Y contains NaNs:", np.isnan(Y).any())
+    print("Y contains Infs:", np.isinf(Y).any())
+
+    print("X stats: min", np.min(X), "max", np.max(X))
+    print("Y stats: min", np.min(Y), "max", np.max(Y))
     
-    print(f"Training samples: {X_train.shape[0]}, Validation samples: {X_val.shape[0]}, Test samples: {X_test.shape[0]}")
+    # Split dataset into train (70%), validation (15%), and test (15%)
+    X_train_val, X_test, Y_train_val, Y_test = train_test_split(X, Y, test_size=0.15, random_state=42)
+    X_train, X_val, Y_train, Y_val = train_test_split(X_train_val, Y_train_val, test_size=0.1765, random_state=42)  # 0.1765*0.85 ~ 15%
+    print("Training samples: ", X_train.shape[0], "Validation samples: ", X_val.shape[0], "Test samples: ", X_test.shape[0])
     
     # Create PyTorch datasets and dataloaders
     batch_size = 16
@@ -236,9 +270,9 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # Hyperparameter grid for tuning
-    learning_rates = [0.001, 0.005, 0.01]
-    hidden_sizes = [64, 128, 256]
+    # Hyperparameters
+    learning_rates = [0.001]
+    hidden_sizes = [256]
     num_epochs = 100  # You may adjust epochs
     num_layers = 2  # Number of hidden layers
     
@@ -291,8 +325,7 @@ def main():
     Y_pred = np.concatenate(all_preds, axis=0)
     Y_true = np.concatenate(all_targets, axis=0)
     
-    # Plot an example LiDAR scan: ground truth vs. prediction.
-    
+    print("Saving comparison plots...")
     for i in range(len(Y_true)):
         plt.figure(figsize=(10, 6))
         plt.plot(Y_true[i], label="Ground Truth LiDAR", marker="o")
@@ -303,72 +336,21 @@ def main():
         plt.legend()
         plt.grid(True)
         
-        lidar_plots_folder = os.path.join("Extracted features", f"lidar_plots_{num_epochs}_{num_layers}")
+        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}")
         os.makedirs(lidar_plots_folder, exist_ok=True)
         lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_{i}.png")
         plt.savefig(lidar_plot_file)
         plt.close()
-        print(f"LiDAR prediction plot saved to {lidar_plot_file}")
     
-    """ sample_idx = 10  # Change this index as desired.
-    plt.figure(figsize=(10, 6))
-    plt.plot(Y_true[sample_idx], label="Ground Truth LiDAR", marker="o")
-    plt.plot(Y_pred[sample_idx], label="Predicted LiDAR", linestyle="--", marker="x")
-    plt.xlabel("Scan Index")
-    plt.ylabel("Distance (m)")
-    plt.title("Example LiDAR Scan: Ground Truth vs. Predicted")
-    plt.legend()
-    plt.grid(True)
-    
-    plots_folder = os.path.join("Extracted features", "plots")
-    os.makedirs(plots_folder, exist_ok=True)
-    example_plot_file = os.path.join(plots_folder, "lidar_prediction_example_torch.png")
-    plt.savefig(example_plot_file)
-    plt.close()
-    print(f"Example prediction plot saved to {example_plot_file}") """
-    
-    # compute and plot feature importance
-    importances = compute_permutation_importance(best_model, X_val, Y_val, loss_fn, device)
-    plt.figure(figsize=(12, 6))
-    plt.bar(range(len(importances)), importances)
-    plt.xticks(ticks=range(len(importances)), labels=feature_names_full, rotation=90, ha='right')
-    plt.xlabel("Feature Index")
-    plt.ylabel("Importance")
-    plt.title("Permutation Importance of Features")
-    plt.grid()
-    plt.show()
-        
-    # save feature importance to csv
-    importance_df = pd.DataFrame({
-        "Feature": feature_names_full,
-        "Importance": importances
-    })
-    importance_df.sort_values(by="Importance", ascending=False, inplace=True)
-    
-    base_file_dir = os.path.join("Extracted features", "feature_importance")
-    os.makedirs(base_file_dir, exist_ok=True)
-    
-    base_filename = f"feature_importance_{num_epochs}_{num_layers}"
-    counter = 1
-    file_extension = ".csv"
-    importance_file = os.path.join(base_file_dir, f"{base_filename}{file_extension}")
-    
-    while os.path.exists(importance_file):
-        importance_file = os.path.join(base_file_dir, f"{base_filename}_{counter}{file_extension}")
-        counter += 1
-        
-    importance_df.to_csv(importance_file, index=False)
-    print(f"Feature importances saved to {importance_file}")
+    # currently broken - will fix later
+    #save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, device, feature_names_full, num_epochs, num_layers)
     
     # Save the best model.
-    models_folder = os.path.join("Extracted features", "models")
+    models_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "models")
     os.makedirs(models_folder, exist_ok=True)
-    model_file = os.path.join(models_folder, f"lidar_prediction_model_tuned_torch_{num_epochs}_{num_layers}.pth")
+    model_file = os.path.join(models_folder, f"{chosen_dataset}_{num_epochs}_{num_layers}_model.pth")
     torch.save({
         "model_state_dict": best_model.state_dict(),
         "hyperparameters": best_hyperparams
     }, model_file)
     print(f"Best model saved to {model_file}")
-
-if __name__ == '__main__':
-    main()

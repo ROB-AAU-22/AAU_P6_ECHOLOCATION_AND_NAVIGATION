@@ -1,6 +1,6 @@
 # Define the __all__ variable
-__all__ = ["ML_predict", "ML_pytourch"]
+__all__ = ["ModelPredict", "ModelTrain"]
 
 # Import the submodules
-from . import ML_predict
-from . import ML_pytourch
+from . import ModelPredict
+from . import ModelTrain

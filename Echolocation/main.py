@@ -4,53 +4,64 @@ import subprocess
 import sys
 
 # Import local scripts
-from FeatureExtraction import Feature_extraction_CSV_0_2
-from FeatureExtraction import Normalized_features
-from MachineLearning import ML_pytourch
+from FeatureExtraction import FeatureExtractionScript
+from FeatureExtraction import NormalizeFeatures
+from MachineLearning import ModelTrain
 
+def main():
+    train_predict_input = input("Would you like to train or predict? (train/predict) ").strip().lower()
+    if train_predict_input == "train":
+        dataset_root_path = os.path.join("./Echolocation/Data", "dataset")
+        chosen_dataset = None
+        # checking if the dataset directory exists (whether we have any data)
+        if not os.path.exists(dataset_root_path):
+            print(f"Dataset directory {dataset_root_path} does not exist.")
+            # if we dont have any data, pull it from somewhere (?)
+            return
+        else:
+            # choosing a dataset to train on 
+            print("Choose a dataset to train on:")
+            for i, dataset in enumerate(os.listdir(dataset_root_path)):
+                dataset_path = os.path.join(dataset_root_path, dataset)
+                if not os.path.exists(dataset_path) or len(os.listdir(dataset_path)) == 0:
+                    continue
+                else:
+                    print(f"{dataset} [{i}]")
+            choose_dataset_input = input("Enter the index of the dataset you want to train: ")
+            chosen_dataset = os.listdir(dataset_root_path)[int(choose_dataset_input)]
+            dataset_root_path = os.path.join(dataset_root_path, chosen_dataset)
+            print(f"Selected dataset: {dataset_root_path}")
+        
+        # optional to extract features
+        extract_features_input = input("Would you like to extract features? (y/n) ").strip().lower()
+        if extract_features_input == "y":
+            print("Extracting features...")
+            FeatureExtractionScript.extract_features(dataset_root_path, chosen_dataset)
+            print("Normalizing features...")
+            NormalizeFeatures.normalize_features(chosen_dataset)
+        else:
+            print("Skipping feature extraction.")
+        
+        # train model based on features
+        extracted_features_path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset + "_features_all_normalized.csv")
+        
+        if not os.path.exists(extracted_features_path):
+            print(f"Feature file {extracted_features_path} does not exist.")
+            print(f"Extracting features for {extracted_features_path}...")
+            FeatureExtractionScript.extract_features(dataset_root_path, chosen_dataset)
+            print("Normalizing features...")
+            NormalizeFeatures.normalize_features(chosen_dataset)
 
-def run_feature_extraction(dataset_root):
-    # Set dataset path
-    Feature_extraction_CSV_0_2.dataset_root = dataset_root
-    # Run feature extraction
-    Feature_extraction_CSV_0_2.main()
-
-
-def run_normalization():
-    # Run normalization
-    Normalized_features.main()
-
-
-def run_ml_pipeline():
-    # Run ML pipeline
-    ML_pytourch.main()
-
-
-def main(dataset_root):
-    # Ensure dataset_root is absolute
-    dataset_root = os.path.abspath(dataset_root)
-
-    print(f"Running pipeline on dataset: {dataset_root}")
-
-    # Step 1: Feature Extraction
-    print("\n--- Extracting Features ---")
-    run_feature_extraction(dataset_root)
-
-    # Step 2: Feature Normalization
-    print("\n--- Normalizing Features ---")
-    run_normalization()
-
-    # Step 3: Machine Learning Pipeline
-    print("\n--- Running ML Pipeline ---")
-    run_ml_pipeline()
-
-    print("\nPipeline completed successfully.")
-
+        # otherwise train model
+        print("Training model...")
+        ModelTrain.model_training(dataset_root_path, chosen_dataset)
+        print("Model training complete.")
+        
+    elif train_predict_input == "predict":
+        print("predict script")
+    else:
+        print("Invalid input. Please enter 'train' or 'predict'.")
+        return
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print("Usage: python main.py <path_to_dataset>")
-        sys.exit(1)
-
-    dataset_path = sys.argv[1]
-    main(dataset_path)
+    main()

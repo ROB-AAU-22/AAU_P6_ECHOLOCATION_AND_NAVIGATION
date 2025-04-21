@@ -1,6 +1,6 @@
 # Define the __all__ variable
-__all__ = ["Feature_extraction_CSV_0_2", "Normalized_features"]
+__all__ = ["FeatureExtractionScript", "NormalizeFeatures"]
 
 # Import the submodules
-from . import Normalized_features
-from . import Feature_extraction_CSV_0_2
+from . import NormalizeFeatures
+from . import FeatureExtractionScript

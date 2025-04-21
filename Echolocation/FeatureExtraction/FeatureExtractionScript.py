@@ -12,31 +12,6 @@ from scipy.signal import correlate, coherence
 # Helper Functions
 # --------------------------------------------------
 
-def load_mono_audio(file_path, sr=None):
-    """
-    Loads a single-channel (mono) audio file using soundfile.
-    Returns (signal, sample_rate).
-    If 'sr' is specified and differs from the file, resample.
-    """
-    data, sample_rate = sf.read(file_path)
-    if data.ndim == 2:
-        data = data[:, 0]
-    if sr is not None and sample_rate != sr:
-        data = librosa.resample(data, orig_sr=sample_rate, target_sr=sr)
-        sample_rate = sr
-    return data, sample_rate
-
-def combine_stereo(left_signal, right_signal):
-    """
-    Combine two mono numpy arrays (same length) into a 2D array
-    representing a stereo signal: shape = (samples, 2).
-    """
-    min_len = min(len(left_signal), len(right_signal))
-    left_signal = left_signal[:min_len]
-    right_signal = right_signal[:min_len]
-    stereo_signal = np.column_stack((left_signal, right_signal))
-    return stereo_signal
-
 def compute_time_features(signal, sr, frame_length=2048, hop_length=512):
     # rms and zcr are calculated properly but may have to adjust frame length and hop length
     # the default values are 2048 and 512 if you were to not input anything in the function which could maybe be used as an argument
@@ -157,70 +132,47 @@ def compute_room_acoustics_features(impulse_response, sr):
     features["clarity_C80_db"] = C80
     return features
 
-def flatten_dict(d, parent_key='', sep='_'):
+def extract_features(dataset_root_directory, chosen_dataset):
     """
-    Recursively flattens a nested dictionary.
-    Lists are converted to semicolon-separated strings.
+    Extracts features from audio files in the specified dataset directory.
+    The dataset should contain subdirectories with audio files named "sound.wav".
+    The extracted features are saved in a CSV file.
+    The output CSV file will be saved in the "ExtractedFeatures" folder.
     """
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        else:
-            if isinstance(v, list):
-                v = ";".join(str(item) for item in v)
-            items.append((new_key, v))
-    return dict(items)
-
-# --------------------------------------------------
-# Main Feature Extraction Loop
-# --------------------------------------------------
-
-def main():
-    output_folder = "Extracted_features"
+    output_folder = "./Echolocation/FeatureExtraction/ExtractedFeatures"
     os.makedirs(output_folder, exist_ok=True)
-    dataset_root = None
-
+    
     records = []
-    folder_number = 0
-
-    for folder_name in os.listdir(dataset_root):
-        folder_path = os.path.join(dataset_root, folder_name)
+    
+    for folder_name in os.listdir(dataset_root_directory):
+        folder_path = os.path.join(dataset_root_directory, folder_name)
         if not os.path.isdir(folder_path):
             continue
-
-        folder_number += 1
-        renamed_folder = f"{folder_name}_{folder_number}"
-
-        print(f"Processing folder: {folder_path}")
-
-        left_wav_path, right_wav_path = None, None
-
-        for f in os.listdir(folder_path):
-            if f.endswith("sound_left.wav"):
-                left_wav_path = os.path.join(folder_path, f)
-            elif f.endswith("sound_right.wav"):
-                right_wav_path = os.path.join(folder_path, f)
-
-        if not left_wav_path and not right_wav_path:
-            print(f"  No .wav file found in {folder_name}, skipping.")
+        
+        print("Extracting features for data in folder: ", folder_path)
+        
+        wav_file_path = None
+        
+        for sound_file in os.listdir(folder_path):
+            if sound_file.endswith("sound.wav"):
+                wav_file_path = os.path.join(folder_path, sound_file)
+                break
+        
+        if not wav_file_path:
+            print("No .wav file found in ", folder_name, ", skipping.")
             continue
-
-        folder_features = {"filename": renamed_folder}
-
+        
+        folder_features = {"filename": folder_name}
+        
         try:
-            if left_wav_path and right_wav_path:
-                left_signal, sr_left = load_mono_audio(left_wav_path)
-                right_signal, sr_right = load_mono_audio(right_wav_path)
-
-                if sr_left != sr_right:
-                    right_signal = librosa.resample(right_signal, sr_right, sr_left)
-                sr = sr_left
-
-                stereo_signal = combine_stereo(left_signal, right_signal)
+            if wav_file_path:
+                stereo_signal, sr = sf.read(wav_file_path)
+                
+                if stereo_signal.ndim != 2 and stereo_signal.shape[1] < 2:
+                    raise ValueError("Input audio file is not stereo.")
+                
                 left_ch, right_ch = stereo_signal[:, 0], stereo_signal[:, 1]
-
+                
                 folder_features.update({
                     **{f"left_{k}": v for k, v in compute_time_features(left_ch, sr).items()},
                     **{f"left_{k}": v for k, v in compute_frequency_features(left_ch, sr).items()},
@@ -228,30 +180,17 @@ def main():
                     **{f"right_{k}": v for k, v in compute_frequency_features(right_ch, sr).items()},
                     **compute_spatial_features(left_ch, right_ch, sr)
                 })
-
-                duration = len(left_ch) / sr
-                if duration < 2.0:
+                
+                stereo_signal_duration = len(stereo_signal) / sr
+                if stereo_signal_duration < 2.0:
                     folder_features.update(compute_room_acoustics_features(left_ch, sr))
-
-            else:
-                single_wav = left_wav_path or right_wav_path
-                signal, sr = load_mono_audio(single_wav)
-
-                folder_features.update({
-                    **{f"single_{k}": v for k, v in compute_time_features(signal, sr).items()},
-                    **{f"single_{k}": v for k, v in compute_frequency_features(signal, sr).items()},
-                })
-
-                duration = len(signal) / sr
-                if duration < 2.0:
-                    folder_features.update(compute_room_acoustics_features(signal, sr))
-
-            records.append(folder_features)
-
+                
+                records.append(folder_features)
+                
         except Exception as e:
-            print(f"  Error processing {folder_name}: {e}")
+            print("Error processing ", folder_name, ": ", e)
             continue
-
+    
     df = pd.json_normalize(records, sep="_")
 
     print("DataFrame preview:")
@@ -261,13 +200,10 @@ def main():
     print("DataFrame description:")
     print(description)
 
-    description_file = os.path.join(output_folder, "features_description_CSV.txt")
+    description_file = os.path.join(output_folder, chosen_dataset + "_features_description_CSV.txt")
     description.to_csv(description_file, sep="\t")
     print(f"Description saved to {description_file}")
 
-    output_csv = os.path.join(output_folder, "features_all.csv")
+    output_csv = os.path.join(output_folder, chosen_dataset + "_features_all.csv")
     df.to_csv(output_csv, index=False)
     print(f"DataFrame saved to {output_csv}")
-
-if __name__ == '__main__':
-    main()
