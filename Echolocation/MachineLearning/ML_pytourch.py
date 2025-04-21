@@ -6,9 +6,7 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import shap
 
-import shap.maskers
 import torch
 import torch.nn as nn
 import torch.optim as optim

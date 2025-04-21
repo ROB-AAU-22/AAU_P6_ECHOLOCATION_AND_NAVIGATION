@@ -55,19 +55,19 @@ def compute_time_features(signal, sr, frame_length=2048, hop_length=512):
 def compute_frequency_features(signal, sr, n_fft=2048, hop_length=512, n_mfcc=13):
     stft = librosa.stft(signal, n_fft=n_fft, hop_length=hop_length)
     magnitude = np.abs(stft)
-    centroid = librosa.feature.spectral_centroid(S=magnitude, sr=sr)[0]
+    #centroid = librosa.feature.spectral_centroid(S=magnitude, sr=sr)[0]
     bandwidth = librosa.feature.spectral_bandwidth(S=magnitude, sr=sr)[0]
     rolloff = librosa.feature.spectral_rolloff(S=magnitude, sr=sr)[0]
-    mfccs = librosa.feature.mfcc(y=signal, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
+    #mfccs = librosa.feature.mfcc(y=signal, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
     features = {
-        "spectral_centroid_mean": float(np.mean(centroid)),
-        "spectral_centroid_std": float(np.std(centroid)),
+        #"spectral_centroid_mean": float(np.mean(centroid)),
+        #"spectral_centroid_std": float(np.std(centroid)),
         "spectral_bandwidth_mean": float(np.mean(bandwidth)),
         "spectral_bandwidth_std": float(np.std(bandwidth)),
         "spectral_rolloff_mean": float(np.mean(rolloff)),
         "spectral_rolloff_std": float(np.std(rolloff)),
-        "mfccs_mean": np.mean(mfccs, axis=1).tolist(),
-        "mfccs_std": np.std(mfccs, axis=1).tolist()
+        #"mfccs_mean": np.mean(mfccs, axis=1).tolist(),
+        #"mfccs_std": np.std(mfccs, axis=1).tolist()
     }
     return features
 
@@ -90,12 +90,12 @@ def compute_spatial_features(left_signal, right_signal, sr):
     _, coh = coherence(left_signal, right_signal, fs=sr, nperseg=1024)
     features["interaural_coherence_mean"] = float(np.mean(coh))
     
-    # Phase Difference: average phase difference over STFT frames
-    stft_left = librosa.stft(left_signal, n_fft=2048, hop_length=512)
-    stft_right = librosa.stft(right_signal, n_fft=2048, hop_length=512)
-    phase_diff = np.angle(stft_left) - np.angle(stft_right)
-    phase_diff = np.arctan2(np.sin(phase_diff), np.cos(phase_diff))
-    features["phase_diff_mean"] = float(np.mean(phase_diff))
+    ## Phase Difference: average phase difference over STFT frames
+    #stft_left = librosa.stft(left_signal, n_fft=2048, hop_length=512)
+    #stft_right = librosa.stft(right_signal, n_fft=2048, hop_length=512)
+    #phase_diff = np.angle(stft_left) - np.angle(stft_right)
+    #phase_diff = np.arctan2(np.sin(phase_diff), np.cos(phase_diff))
+    #features["phase_diff_mean"] = float(np.mean(phase_diff))
     
     return features
 
@@ -178,9 +178,9 @@ def flatten_dict(d, parent_key='', sep='_'):
 # --------------------------------------------------
 
 def main():
-    dataset_root = "dataset_2"
-    output_folder = "Extracted features"
+    output_folder = "Extracted_features"
     os.makedirs(output_folder, exist_ok=True)
+    dataset_root = "\\Users\\rasmu\\OneDrive - Aalborg Universitet\\Desktop\\ROB6\\P6\\Code\\DataRecording\\datasets\\High_Long"
 
     records = []
     folder_number = 0
@@ -261,7 +261,7 @@ def main():
     print("DataFrame description:")
     print(description)
 
-    description_file = os.path.join(output_folder, "features_description.txt")
+    description_file = os.path.join(output_folder, "features_description_CSV.txt")
     description.to_csv(description_file, sep="\t")
     print(f"Description saved to {description_file}")
 
