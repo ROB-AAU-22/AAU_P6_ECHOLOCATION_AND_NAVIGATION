@@ -180,7 +180,7 @@ def flatten_dict(d, parent_key='', sep='_'):
 def main():
     output_folder = "Extracted_features"
     os.makedirs(output_folder, exist_ok=True)
-    dataset_root = "\\Users\\rasmu\\OneDrive - Aalborg Universitet\\Desktop\\ROB6\\P6\\Code\\DataRecording\\datasets\\High_Long"
+    dataset_root = None
 
     records = []
     folder_number = 0
