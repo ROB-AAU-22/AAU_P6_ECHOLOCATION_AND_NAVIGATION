@@ -38,6 +38,10 @@ def combine_stereo(left_signal, right_signal):
     return stereo_signal
 
 def compute_time_features(signal, sr, frame_length=2048, hop_length=512):
+    # rms and zcr are calculated properly but may have to adjust frame length and hop length
+    # the default values are 2048 and 512 if you were to not input anything in the function which could maybe be used as an argument
+    # if we dont want to change them (?)
+    # only looking at one value of rms and zcr rn, maybe consider more (?)
     rms = librosa.feature.rms(y=signal, frame_length=frame_length, hop_length=hop_length)[0]
     zcr = librosa.feature.zero_crossing_rate(y=signal, frame_length=frame_length, hop_length=hop_length)[0]
     features = {
@@ -110,6 +114,8 @@ def compute_rt60(impulse_response, sr):
     return float(rt60) if rt60 is not None else None
 
 def compute_drr(impulse_response, sr):
+    # looks like it is calculated correctly but there might be issues with the direct part
+    # where it is maybe not fully exact, as the first peak is not necessarily where the direct part starts 
     peak_idx = np.argmax(np.abs(impulse_response))
     window_size = int(0.005 * sr)
     direct_energy = np.sum(impulse_response[peak_idx:peak_idx+window_size]**2)

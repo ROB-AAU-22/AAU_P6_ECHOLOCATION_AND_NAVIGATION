@@ -346,10 +346,19 @@ def main():
         "Importance": importances
     })
     importance_df.sort_values(by="Importance", ascending=False, inplace=True)
-    importance_file = os.path.join("Extracted features", "feature_importance", f"feature_importances_{num_epochs}_{num_layers}.csv")
-    os.makedirs(os.path.dirname(importance_file), exist_ok=True)
-    if(os.path.exists(importance_file)):
-        os.remove(importance_file)
+    
+    base_file_dir = os.path.join("Extracted features", "feature_importance")
+    os.makedirs(base_file_dir, exist_ok=True)
+    
+    base_filename = f"feature_importance_{num_epochs}_{num_layers}"
+    counter = 1
+    file_extension = ".csv"
+    importance_file = os.path.join(base_file_dir, f"{base_filename}{file_extension}")
+    
+    while os.path.exists(importance_file):
+        importance_file = os.path.join(base_file_dir, f"{base_filename}_{counter}{file_extension}")
+        counter += 1
+        
     importance_df.to_csv(importance_file, index=False)
     print(f"Feature importances saved to {importance_file}")
     
