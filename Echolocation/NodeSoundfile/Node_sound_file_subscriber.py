@@ -7,7 +7,7 @@ from datetime import datetime
 
 def callback(msg):
     # Create an output folder if it doesn't exist
-    output_folder = "path"  # Make sure to update with the correct folder path
+    output_folder = "robot/group_665"  # Make sure to update with the correct folder path
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
