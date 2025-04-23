@@ -28,7 +28,11 @@ def main():
                 else:
                     print(f"{dataset} [{i}]")
             choose_dataset_input = input("Enter the index of the dataset you want to train: ")
-            chosen_dataset = os.listdir(dataset_root_path)[int(choose_dataset_input)]
+            try:
+                chosen_dataset = os.listdir(dataset_root_path)[int(choose_dataset_input)]
+            except IndexError as e:
+                print(f"Invalid index: {e}. Please choose a valid dataset index.")
+                return
             dataset_root_path = os.path.join(dataset_root_path, chosen_dataset)
             print(f"Selected dataset: {dataset_root_path}")
         
@@ -43,7 +47,7 @@ def main():
             print("Skipping feature extraction.")
         
         # train model based on features
-        extracted_features_path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset + "_features_all_normalized.csv")
+        extracted_features_path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, "features_all_normalized.csv")
         
         if not os.path.exists(extracted_features_path):
             print(f"Feature file {extracted_features_path} does not exist.")
