@@ -227,6 +227,12 @@ def save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, d
         
     importance_df.to_csv(importance_file, index=False)
     print(f"Feature importances saved to {importance_file}")
+    
+def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):  # 270 degrees centered forward
+    angles = np.linspace(angle_range[0], angle_range[1], num=len(distances))
+    x = distances * np.cos(angles)
+    y = distances * np.sin(angles)
+    return x, y
 
 def model_training(dataset_root_directory, chosen_dataset):
     # Placeholder function for training the model.
@@ -327,6 +333,45 @@ def model_training(dataset_root_directory, chosen_dataset):
     
     print("Saving comparison plots...")
     for i in range(len(Y_true)):
+        gt_x, gt_y = polar_to_cartesian(Y_true[i])
+        pred_x, pred_y = polar_to_cartesian(Y_pred[i])
+
+        plt.figure(figsize=(8, 8))
+        plt.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=1)
+        plt.plot(pred_x, pred_y, label="Predicted LiDAR", marker='x', linestyle='--', alpha=0.7, zorder=1)
+
+        # Draw robot as a small circle at the origin
+        robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
+        plt.gca().add_patch(robot_circle)
+        middle_circle_gt = plt.Circle((gt_x[540], gt_y[540]), 0.2, color='blue', fill=True, alpha=0.5, label='Middle Point', zorder=2)
+        plt.gca().add_patch(middle_circle_gt)
+        middle_circle_pred = plt.Circle((pred_x[540], pred_y[540]), 0.2, color='red', fill=True, alpha=0.5, label='Middle Point', zorder=2)
+        plt.gca().add_patch(middle_circle_pred)
+        
+        # draw a line from origin to first scan point 
+        plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+        plt.plot([0, pred_x[0]], [0, pred_y[0]], color='red', linestyle='--', alpha=0.5, zorder=3)
+        # draw a line from origin to last scan point
+        plt.plot([0, gt_x[-1]], [0, gt_y[-1]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+        plt.plot([0, pred_x[-1]], [0, pred_y[-1]], color='red', linestyle='--', alpha=0.5, zorder=3)
+        
+        # draw an arrow vector from origin to middle point(s)
+        plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
+        plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
+
+        plt.axis('equal')
+        plt.xlabel("X (m)")
+        plt.ylabel("Y (m)")
+        plt.title(f"LiDAR 2D View - Scan {i} : {num_epochs} epochs : {num_layers} layers")
+        plt.grid(True)
+        plt.legend()
+        
+        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "cartesian")
+        os.makedirs(lidar_plots_folder, exist_ok=True)
+        lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_cartesian_{i}.png")
+        plt.savefig(lidar_plot_file)
+        plt.close()
+        
         plt.figure(figsize=(10, 6))
         plt.plot(Y_true[i], label="Ground Truth LiDAR", marker="o")
         plt.plot(Y_pred[i], label="Predicted LiDAR", linestyle="--", marker="x")
@@ -336,7 +381,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         plt.legend()
         plt.grid(True)
         
-        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}")
+        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "scan_index")
         os.makedirs(lidar_plots_folder, exist_ok=True)
         lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_{i}.png")
         plt.savefig(lidar_plot_file)
