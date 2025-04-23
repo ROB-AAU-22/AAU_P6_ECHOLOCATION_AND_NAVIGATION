@@ -9,8 +9,9 @@ from FeatureExtraction import NormalizeFeatures
 from MachineLearning import ModelTrain
 
 def main():
-    train_predict_input = input("Would you like to train or predict? (train/predict) ").strip().lower()
-    if train_predict_input == "train":
+    #train_predict_input = input("Would you like to train or predict? (train/predict) ").strip().lower()
+    #if train_predict_input == "train":
+    if True:
         dataset_root_path = os.path.join("./Echolocation/Data", "dataset")
         chosen_dataset = None
         # checking if the dataset directory exists (whether we have any data)
@@ -57,8 +58,8 @@ def main():
         ModelTrain.model_training(dataset_root_path, chosen_dataset)
         print("Model training complete.")
         
-    elif train_predict_input == "predict":
-        print("predict script")
+    #elif train_predict_input == "predict":
+    #    print("predict script")
     else:
         print("Invalid input. Please enter 'train' or 'predict'.")
         return

@@ -6,13 +6,15 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import threading
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 from sklearn.model_selection import train_test_split
+
+distance_threshold = 2
 
 # ---------------------------
 # Data Preparation Functions
@@ -29,6 +31,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
       - X: NumPy array of shape (n_samples, n_audio_features)
       - Y: NumPy array of shape (n_samples, n_lidar_points)
       - sample_ids: List of sample indices (timestamps)
+      - original_distances: List of original LiDAR distances for plotting
     """
     df = pd.read_csv(csv_file)
     df.sort_values("filename", inplace=True)
@@ -37,6 +40,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
 
     X_list = []
     Y_list = []
+    original_distances = []
     sample_ids = []
     feature_names_full = []
 
@@ -92,6 +96,11 @@ def build_dataset_from_csv(csv_file, dataset_root):
             with open(lidar_file, "r") as f:
                 lidar_data = json.load(f)
             lidar_vector = np.array(lidar_data["LiDAR_distance"], dtype=float)
+            original_distances.append(lidar_vector.copy())  # Store original distances for plotting
+
+            # Mark distances above distance_threshold as NaN
+            lidar_vector[lidar_vector > distance_threshold] = np.nan
+
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
             continue
@@ -102,8 +111,20 @@ def build_dataset_from_csv(csv_file, dataset_root):
 
     X = np.array(X_list)
     Y = np.array(Y_list)
-    return X, Y, sample_ids, feature_names_full
+    return X, Y, sample_ids, feature_names_full, original_distances
 
+class MaskedMSELoss(nn.Module):
+    def __init__(self):
+        super(MaskedMSELoss, self).__init__()
+        self.mse_loss = nn.MSELoss(reduction='none')
+
+    def forward(self, outputs, targets):
+        # Mask values where targets are NaN or greater than distance_threshold
+        mask = ~torch.isnan(targets) & (targets <= distance_threshold)
+        outputs = outputs[mask]
+        targets = targets[mask]
+        loss = self.mse_loss(outputs, targets)
+        return loss.mean()
 
 class AudioLidarDataset(Dataset):
     def __init__(self, X, Y):
@@ -125,7 +146,7 @@ class AudioLidarDataset(Dataset):
 class MLPRegressor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
         """
-        A simple feedforward neural network for regression.
+        A simple feedforward neural network for regression and classification.
 
         Parameters:
           - input_dim: number of input features.
@@ -140,16 +161,19 @@ class MLPRegressor(nn.Module):
         for i in range(num_layers - 1):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.ReLU())
-        layers.append(nn.Linear(hidden_dim, output_dim))
-        self.model = nn.Sequential(*layers)
+        self.regression_head = nn.Sequential(*layers, nn.Linear(hidden_dim, output_dim))
+        self.classification_head = nn.Sequential(nn.Linear(hidden_dim, output_dim), nn.Sigmoid())
 
     def forward(self, x):
-        return self.model(x)
+        shared = self.regression_head[:-1](x)  # Shared layers
+        regression_output = self.regression_head[-1](shared)
+        classification_output = self.classification_head(shared)
+        return regression_output, classification_output
 
 # ---------------------------
 # Training Function
 # ---------------------------
-def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, num_epochs):
+def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn, device, num_epochs):
     best_val_loss = float("inf")
     best_model_state = None
 
@@ -160,8 +184,11 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, num
             X_batch = X_batch.to(device)
             Y_batch = Y_batch.to(device)
             optimizer.zero_grad()
-            outputs = model(X_batch)
-            loss = loss_fn(outputs, Y_batch)
+            regression_outputs, classification_outputs = model(X_batch)
+            regression_loss = regression_loss_fn(regression_outputs, Y_batch)
+            classification_targets = (Y_batch <= distance_threshold).float()
+            classification_loss = classification_loss_fn(classification_outputs, classification_targets)
+            loss = regression_loss + classification_loss
             loss.backward()
             optimizer.step()
             train_losses.append(loss.item())
@@ -173,8 +200,11 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, num
             for X_batch, Y_batch in val_loader:
                 X_batch = X_batch.to(device)
                 Y_batch = Y_batch.to(device)
-                outputs = model(X_batch)
-                loss = loss_fn(outputs, Y_batch)
+                regression_outputs, classification_outputs = model(X_batch)
+                regression_loss = regression_loss_fn(regression_outputs, Y_batch)
+                classification_targets = (Y_batch <= distance_threshold).float()
+                classification_loss = classification_loss_fn(classification_outputs, classification_targets)
+                loss = regression_loss + classification_loss
                 val_losses.append(loss.item())
         avg_val_loss = np.mean(val_losses)
 
@@ -188,14 +218,14 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, num
 
 def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
     model.eval()
-    base_preds = model(torch.tensor(X_val, dtype=torch.float32).to(device))
+    base_preds, _ = model(torch.tensor(X_val, dtype=torch.float32).to(device))
     base_loss = loss_fn(base_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
 
     importances = []
     for i in range(X_val.shape[1]):
         X_permuted = X_val.copy()
         np.random.shuffle(X_permuted[:, i])  # Shuffle i-th feature column
-        permuted_preds = model(torch.tensor(X_permuted, dtype=torch.float32).to(device))
+        permuted_preds, _ = model(torch.tensor(X_permuted, dtype=torch.float32).to(device))
         permuted_loss = loss_fn(permuted_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
         importance = permuted_loss - base_loss
         importances.append(importance)
@@ -239,7 +269,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     # This should be replaced with the actual training logic.
     csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset + "_features_all_normalized.csv")
 
-    X, Y, sample_ids, feature_names_full = build_dataset_from_csv(csv_file, dataset_root_directory)
+    X, Y, sample_ids, feature_names_full, original_distances = build_dataset_from_csv(csv_file, dataset_root_directory)
     if X.shape[0] == 0:
         print("No valid samples found. Exiting.")
         return
@@ -255,8 +285,8 @@ def model_training(dataset_root_directory, chosen_dataset):
     print("Y stats: min", np.min(Y), "max", np.max(Y))
 
     # Split dataset into train (70%), validation (15%), and test (15%)
-    X_train_val, X_test, Y_train_val, Y_test = train_test_split(X, Y, test_size=0.15, random_state=42)
-    X_train, X_val, Y_train, Y_val = train_test_split(X_train_val, Y_train_val, test_size=0.1765, random_state=42)  # 0.1765*0.85 ~ 15%
+    X_train_val, X_test, Y_train_val, Y_test, original_distances_train_val, original_distances_test = train_test_split(X, Y, original_distances, test_size=0.15, random_state=42)
+    X_train, X_val, Y_train, Y_val, original_distances_train, original_distances_val = train_test_split(X_train_val, Y_train_val, original_distances_train_val, test_size=0.1765, random_state=42)  # 0.1765*0.85 ~ 15%
     print("Training samples: ", X_train.shape[0], "Validation samples: ", X_val.shape[0], "Test samples: ", X_test.shape[0])
 
     # Create PyTorch datasets and dataloaders
@@ -281,36 +311,68 @@ def model_training(dataset_root_directory, chosen_dataset):
     hidden_sizes = [256]
     num_epochs = 100  # You may adjust epochs
     num_layers = 2  # Number of hidden layers
+    classification_thresholds = [0.5]  # Thresholds to try
 
-    best_overall_val_loss = float("inf")
+    best_overall_val_loss = 0
     best_hyperparams = None
     best_model_state = None
+    best_threshold = None
+
+    # Define the global custom loss function
+    regression_loss_fn = MaskedMSELoss()
+    classification_loss_fn = nn.BCELoss()
 
     # Grid search over hyperparameters.
     for lr in learning_rates:
         for hidden_size in hidden_sizes:
-            print(f"\nTraining with learning rate={lr}, hidden_size={hidden_size}")
-            model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
-            optimizer = optim.Adam(model.parameters(), lr=lr)
-            loss_fn = nn.MSELoss()
+            for threshold in classification_thresholds:
+                print(f"\nTraining with learning rate={lr}, hidden_size={hidden_size}, classification_threshold={threshold}")
+                model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
+                optimizer = optim.Adam(model.parameters(), lr=lr)
 
-            val_loss, model_state = train_model(model, train_loader, val_loader, optimizer, loss_fn, device, num_epochs)
+                val_loss, model_state = train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn, device, num_epochs)
 
-            print(f"Hyperparams (lr={lr}, hidden_size={hidden_size}) - Best Val Loss: {val_loss:.4f}")
-            if len(learning_rates) == 1 and len(hidden_sizes) == 1:
-                best_overall_val_loss = val_loss
-                best_hyperparams = {"input_dim": input_dim, "output_dim": output_dim, "lr": lr,
-                                    "hidden_size": hidden_size, "num_epochs": num_epochs, "num_layers": num_layers}
-                best_model_state = model_state
-            elif val_loss < best_overall_val_loss:
-                best_overall_val_loss = val_loss
-                best_hyperparams = {"input_dim": input_dim, "output_dim": output_dim, "lr": lr,
-                                    "hidden_size": hidden_size, "num_epochs": num_epochs, "num_layers": num_layers}
-                best_model_state = model_state
+                # Evaluate classification accuracy on the validation set
+                model.eval()
+                val_classification_accuracies = []
+                with torch.no_grad():
+                    for X_batch, Y_batch in val_loader:
+                        X_batch = X_batch.to(device)
+                        Y_batch = Y_batch.to(device)
+                        regression_outputs, classification_outputs = model(X_batch)
+                        classification_targets = (Y_batch <= distance_threshold).float()
+                        classification_preds = (classification_outputs > threshold).float()
+                        accuracy = (classification_preds == classification_targets).float().mean().item()
+                        val_classification_accuracies.append(accuracy)
+                avg_val_classification_accuracy = np.mean(val_classification_accuracies)
+
+                print(f"Hyperparams (lr={lr}, hidden_size={hidden_size}, threshold={threshold}) - Best Val Loss: {val_loss:.4f}, Val Classification Accuracy: {avg_val_classification_accuracy:.4f}")
+
+                print("avg val classification accuracy:", avg_val_classification_accuracy, "best overall val loss:", best_overall_val_loss, "best threshold:", best_threshold)
+                # Update best hyperparameters if the current configuration is better
+                if avg_val_classification_accuracy > best_overall_val_loss:
+                    print("New best hyperparameters found!")
+                    best_overall_val_loss = avg_val_classification_accuracy
+                    best_hyperparams = {
+                        "input_dim": input_dim,
+                        "output_dim": output_dim,
+                        "lr": lr,
+                        "hidden_size": hidden_size,
+                        "num_epochs": num_epochs,
+                        "num_layers": num_layers
+                    }
+                    best_model_state = model_state
+                    best_threshold = threshold
+
+    # Check if best_hyperparams is not None before accessing its elements
+    if best_hyperparams is None:
+        print("Error: No valid hyperparameters found during grid search.")
+        return
 
     print("\nBest hyperparameters found:")
     print(best_hyperparams)
-    print(f"Best validation loss: {best_overall_val_loss:.4f}")
+    print(f"Best classification threshold: {best_threshold}")
+    print(f"Best validation classification accuracy: {best_overall_val_loss:.4f}")
 
     # Build the best model and load best state
     best_model = MLPRegressor(input_dim, best_hyperparams["hidden_size"], output_dim, num_layers=num_layers).to(device)
@@ -321,38 +383,48 @@ def model_training(dataset_root_directory, chosen_dataset):
     test_losses = []
     all_preds = []
     all_targets = []
+    all_classifications = []
     with torch.no_grad():
         for X_batch, Y_batch in test_loader:
             X_batch = X_batch.to(device)
             Y_batch = Y_batch.to(device)
-            outputs = best_model(X_batch)
-            loss = loss_fn(outputs, Y_batch)
+            regression_outputs, classification_outputs = best_model(X_batch)
+            regression_loss = regression_loss_fn(regression_outputs, Y_batch)
+            classification_targets = (Y_batch <= distance_threshold).float()
+            classification_loss = classification_loss_fn(classification_outputs, classification_targets)
+            loss = regression_loss + classification_loss
             test_losses.append(loss.item())
-            all_preds.append(outputs.cpu().numpy())
+            all_preds.append(regression_outputs.cpu().numpy())
             all_targets.append(Y_batch.cpu().numpy())
+            all_classifications.append(classification_outputs.cpu().numpy())
     avg_test_loss = np.mean(test_losses)
     print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
 
     # Concatenate predictions for plotting.
     Y_pred = np.concatenate(all_preds, axis=0)
     Y_true = np.concatenate(all_targets, axis=0)
+    classifications = np.concatenate(all_classifications, axis=0)
+
+    # Post-process predictions to mark values > distance_threshold as indicating no detection
+    #Y_pred[Y_pred > distance_threshold] = np.nan
 
     print("Saving comparison plots...")
     for i in range(len(Y_true)):
         gt_x, gt_y = polar_to_cartesian(Y_true[i])
         pred_x, pred_y = polar_to_cartesian(Y_pred[i])
+        # Highlight ignored points (distances above distance_threshold) using original distances
+        original_gt = original_distances_test[i]
+        ignored_gt = original_gt > distance_threshold
 
         plt.figure(figsize=(8, 8))
-        plt.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=1)
-        plt.plot(pred_x, pred_y, label="Predicted LiDAR", marker='x', linestyle='--', alpha=0.7, zorder=1)
+        ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt)
+        plt.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o', label='Ignored GT',alpha=0.7, zorder=1)
+        plt.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=2)
+        plt.plot(pred_x, pred_y, label="Predicted LiDAR", marker='x', linestyle='--', alpha=0.7, zorder=3)
 
         # Draw robot as a small circle at the origin
         robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
         plt.gca().add_patch(robot_circle)
-        middle_circle_gt = plt.Circle((gt_x[540], gt_y[540]), 0.2, color='blue', fill=True, alpha=0.5, label='Middle Point', zorder=2)
-        plt.gca().add_patch(middle_circle_gt)
-        middle_circle_pred = plt.Circle((pred_x[540], pred_y[540]), 0.2, color='red', fill=True, alpha=0.5, label='Middle Point', zorder=2)
-        plt.gca().add_patch(middle_circle_pred)
 
         # draw a line from origin to first scan point
         plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
@@ -365,6 +437,13 @@ def model_training(dataset_root_directory, chosen_dataset):
         plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
         plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
 
+        # Add classification markers
+        classified_as_object = classifications[i] > best_threshold
+        classified_as_no_object = ~classified_as_object
+
+        plt.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=50, zorder=5, label='Classified as Object')
+        plt.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange', marker='o', s=50, zorder=5, label='Classified as No Object')
+
         plt.axis('equal')
         plt.xlabel("X (m)")
         plt.ylabel("Y (m)")
@@ -375,12 +454,21 @@ def model_training(dataset_root_directory, chosen_dataset):
         lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "cartesian")
         os.makedirs(lidar_plots_folder, exist_ok=True)
         lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_cartesian_{i}.png")
+        print(f"Saving cartesian LiDAR plot to {lidar_plot_file}")
         plt.savefig(lidar_plot_file)
         plt.close()
 
         plt.figure(figsize=(10, 6))
         plt.plot(Y_true[i], label="Ground Truth LiDAR", marker="o")
         plt.plot(Y_pred[i], label="Predicted LiDAR", linestyle="--", marker="x")
+
+        # Highlight ignored points (distances above distance_threshold) using original distances
+        plt.scatter(np.arange(len(original_gt))[ignored_gt], original_gt[ignored_gt], color='red', marker='o', label='Ignored GT')
+
+        # Add classification markers
+        plt.scatter(np.arange(len(Y_pred[i]))[classified_as_object], Y_pred[i][classified_as_object], color='green', marker='o', s=50, zorder=5, label='Classified as Object')
+        plt.scatter(np.arange(len(Y_pred[i]))[classified_as_no_object], Y_pred[i][classified_as_no_object], color='orange', marker='o', s=50, zorder=5, label='Classified as No Object')
+
         plt.xlabel("Scan Index")
         plt.ylabel("Distance (m)")
         plt.title(f"LiDAR Scan {i} : {num_epochs} epochs : {num_layers} layers")
@@ -390,6 +478,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "scan_index")
         os.makedirs(lidar_plots_folder, exist_ok=True)
         lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_{i}.png")
+        print(f"Saving regular LiDAR plot to {lidar_plot_file}")
         plt.savefig(lidar_plot_file)
         plt.close()
 
@@ -402,6 +491,11 @@ def model_training(dataset_root_directory, chosen_dataset):
     model_file = os.path.join(models_folder, f"{chosen_dataset}_{num_epochs}_{num_layers}_model.pth")
     torch.save({
         "model_state_dict": best_model.state_dict(),
-        "hyperparameters": best_hyperparams
+        "hyperparameters": best_hyperparams,
+        "classification_threshold": best_threshold
     }, model_file)
     print(f"Best model saved to {model_file}")
+
+    # Evaluate classification accuracy
+    classification_accuracy = (classifications.round() == (Y_true <= distance_threshold)).mean()
+    print(f"Classification Accuracy: {classification_accuracy:.4f}")
