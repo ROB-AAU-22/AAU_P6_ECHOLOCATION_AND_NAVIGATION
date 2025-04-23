@@ -52,7 +52,7 @@ def compute_spatial_features(left_signal, right_signal, sr):
     corr = correlate(left_signal, right_signal, mode='full')
     lag_idx = np.argmax(np.abs(corr))
     lag = lag_idx - (len(left_signal) - 1)
-    itd = lag / sr
+    itd = lag / sr + 1e-10  # Avoid division by zero
     features["itd_seconds"] = float(itd)
     
     # ILD: difference in RMS energy in dB
