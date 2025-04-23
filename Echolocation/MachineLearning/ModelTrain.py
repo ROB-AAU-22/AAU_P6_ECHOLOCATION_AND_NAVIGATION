@@ -293,13 +293,19 @@ def model_training(dataset_root_directory, chosen_dataset):
             model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
             optimizer = optim.Adam(model.parameters(), lr=lr)
             loss_fn = nn.MSELoss()
-            
+
             val_loss, model_state = train_model(model, train_loader, val_loader, optimizer, loss_fn, device, num_epochs)
-            
+
             print(f"Hyperparams (lr={lr}, hidden_size={hidden_size}) - Best Val Loss: {val_loss:.4f}")
-            if val_loss < best_overall_val_loss:
+            if len(learning_rates) == 1 and len(hidden_sizes) == 1:
                 best_overall_val_loss = val_loss
-                best_hyperparams = {"input_dim": input_dim, "output_dim": output_dim, "lr": lr, "hidden_size": hidden_size, "num_epochs": num_epochs, "num_layers": num_layers}
+                best_hyperparams = {"input_dim": input_dim, "output_dim": output_dim, "lr": lr,
+                                    "hidden_size": hidden_size, "num_epochs": num_epochs, "num_layers": num_layers}
+                best_model_state = model_state
+            elif val_loss < best_overall_val_loss:
+                best_overall_val_loss = val_loss
+                best_hyperparams = {"input_dim": input_dim, "output_dim": output_dim, "lr": lr,
+                                    "hidden_size": hidden_size, "num_epochs": num_epochs, "num_layers": num_layers}
                 best_model_state = model_state
     
     print("\nBest hyperparameters found:")

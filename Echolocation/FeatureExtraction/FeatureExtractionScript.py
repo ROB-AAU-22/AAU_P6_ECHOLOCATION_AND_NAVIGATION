@@ -132,6 +132,7 @@ def compute_room_acoustics_features(impulse_response, sr):
     features["clarity_C80_db"] = C80
     return features
 
+
 def extract_features(dataset_root_directory, chosen_dataset):
     """
     Extracts features from audio files in the specified dataset directory.
@@ -141,38 +142,48 @@ def extract_features(dataset_root_directory, chosen_dataset):
     """
     output_folder = "./Echolocation/FeatureExtraction/ExtractedFeatures"
     os.makedirs(output_folder, exist_ok=True)
-    
+
     records = []
-    
+    skip_ids = {"1", "10", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
+                "263", "283", "396", "441", "465", "472", "477", "502", "527", "538", "645", "668", "686", "697",
+                "713"}  # Add more as needed
+
     for folder_name in os.listdir(dataset_root_directory):
+
+        folder_id = folder_name.split("_")[1]
+        #print("folder id:", folder_id)
+        if folder_id in skip_ids:
+            print(f"Skipping folder: {folder_name}")
+            continue
+
         folder_path = os.path.join(dataset_root_directory, folder_name)
         if not os.path.isdir(folder_path):
             continue
-        
+
         print("Extracting features for data in folder: ", folder_path)
-        
+
         wav_file_path = None
-        
+
         for sound_file in os.listdir(folder_path):
             if sound_file.endswith("sound.wav"):
                 wav_file_path = os.path.join(folder_path, sound_file)
                 break
-        
+
         if not wav_file_path:
             print("No .wav file found in ", folder_name, ", skipping.")
             continue
-        
+
         folder_features = {"filename": folder_name}
-        
+
         try:
             if wav_file_path:
                 stereo_signal, sr = sf.read(wav_file_path)
-                
+
                 if stereo_signal.ndim != 2 and stereo_signal.shape[1] < 2:
                     raise ValueError("Input audio file is not stereo.")
-                
+
                 left_ch, right_ch = stereo_signal[:, 0], stereo_signal[:, 1]
-                
+
                 folder_features.update({
                     **{f"left_{k}": v for k, v in compute_time_features(left_ch, sr).items()},
                     **{f"left_{k}": v for k, v in compute_frequency_features(left_ch, sr).items()},
@@ -180,17 +191,17 @@ def extract_features(dataset_root_directory, chosen_dataset):
                     **{f"right_{k}": v for k, v in compute_frequency_features(right_ch, sr).items()},
                     **compute_spatial_features(left_ch, right_ch, sr)
                 })
-                
+
                 stereo_signal_duration = len(stereo_signal) / sr
                 if stereo_signal_duration < 2.0:
                     folder_features.update(compute_room_acoustics_features(left_ch, sr))
-                
+
                 records.append(folder_features)
-                
+
         except Exception as e:
             print("Error processing ", folder_name, ": ", e)
             continue
-    
+
     df = pd.json_normalize(records, sep="_")
 
     print("DataFrame preview:")
