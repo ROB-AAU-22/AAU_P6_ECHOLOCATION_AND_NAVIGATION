@@ -3,8 +3,8 @@ import pandas as pd
 
 def normalize_features(chosen_dataset):
     # define path to feature csv
-    input_feature_csv = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset + "_features_all.csv")
-    output_normalized_feature_csv = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset + "_features_all_normalized.csv")
+    input_feature_csv = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, "features_all.csv")
+    output_normalized_feature_csv = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, "features_all_normalized.csv")
     
     df = pd.read_csv(input_feature_csv)
     
@@ -14,6 +14,8 @@ def normalize_features(chosen_dataset):
         # Skip non-numeric columns such as "filename"
         if df[col].dtype.kind not in 'biufc':
             continue
+        
+        print(col)
         
         # Compute z-score normalization for the column
         mean = df[col].mean()

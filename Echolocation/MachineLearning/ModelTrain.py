@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import csv
 
 import torch
 import torch.nn as nn
@@ -13,6 +14,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 from sklearn.model_selection import train_test_split
+from scipy.stats import pearsonr
 
 # ---------------------------
 # Data Preparation Functions
@@ -43,7 +45,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
     feature_cols = [col for col in df.columns if col != "filename"]
     
     # Set of sample numbers to skip
-    skip_ids = {"1", "10", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "527", "538", "645", "668", "686", "697", "713"}  # Add more as needed
+    skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "522", "527", "538", "645", "668", "686", "697", "713", "876"}  # Add more as needed
     
     for idx, row in df.iterrows():
         filename = row["filename"]
@@ -102,6 +104,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
 
     X = np.array(X_list)
     Y = np.array(Y_list)
+    
     return X, Y, sample_ids, feature_names_full
 
 
@@ -234,10 +237,39 @@ def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):  # 270 d
     y = distances * np.sin(angles)
     return x, y
 
+def compute_error_metrics(Y_true, Y_pred):
+    range_bins = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
+    results = {f"{low}_{high}": {'y_true': [], 'y_pred': []} for low, high in range_bins}
+    
+    for y_true, y_pred in zip(Y_true, Y_pred):
+        for low, high in range_bins:
+            if low <= y_true < high:
+                key = f"{low}_{high}"
+                results[key]['y_true'].append(y_true)
+                results[key]['y_pred'].append(y_pred)
+                break  # Exit the loop once the correct bin is found
+    
+    error_metrics_results = {}
+    
+    for (low, high) in range_bins:
+        y_true_arr = np.array(results[f"{low}_{high}"]['y_true'])
+        y_pred_arr = np.array(results[f"{low}_{high}"]['y_pred'])
+        
+        if len(y_true_arr) == 0 or len(y_pred_arr) == 0:
+            continue
+            
+        error_metrics_results[f"{low}_{high}"] = {
+            'mae': np.mean(np.abs(y_true_arr - y_pred_arr)),
+            'rmse': np.sqrt(np.mean((y_true_arr - y_pred_arr) ** 2)),
+            'mre': np.mean(np.abs((y_true_arr - y_pred_arr) / (y_true_arr + 1e-10))) if np.any(y_true_arr) else 0,
+        }
+    
+    return error_metrics_results
+
 def model_training(dataset_root_directory, chosen_dataset):
     # Placeholder function for training the model.
     # This should be replaced with the actual training logic.
-    csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset + "_features_all_normalized.csv")
+    csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, "features_all_normalized.csv")
     
     X, Y, sample_ids, feature_names_full = build_dataset_from_csv(csv_file, dataset_root_directory)
     if X.shape[0] == 0:
@@ -332,6 +364,17 @@ def model_training(dataset_root_directory, chosen_dataset):
     Y_true = np.concatenate(all_targets, axis=0)
     
     print("Saving comparison plots...")
+    
+    mae_array = []
+    rmse_array = []
+    mre_array = []
+    # {"0_1": {"mae": [], "rmse": [], "mre": [], "corr": []}, "1_2": {"mae": [], "rmse": [], "mre": [], "corr": []}}
+    # setup a collection like this for ranges 0-1, 1-2, 2-3, 3-4, and 4-5
+    # for each range, calculate the metrics and append to the collection
+    # then save each range to different csv files
+    
+    range_metrics = []
+    
     for i in range(len(Y_true)):
         gt_x, gt_y = polar_to_cartesian(Y_true[i])
         pred_x, pred_y = polar_to_cartesian(Y_pred[i])
@@ -366,7 +409,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         plt.grid(True)
         plt.legend()
         
-        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "cartesian")
+        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"cartesian_plots_{num_epochs}_{num_layers}")
         os.makedirs(lidar_plots_folder, exist_ok=True)
         lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_cartesian_{i}.png")
         plt.savefig(lidar_plot_file)
@@ -381,17 +424,52 @@ def model_training(dataset_root_directory, chosen_dataset):
         plt.legend()
         plt.grid(True)
         
-        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "scan_index")
+        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"scan_index_plots_{num_epochs}_{num_layers}")
         os.makedirs(lidar_plots_folder, exist_ok=True)
         lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_{i}.png")
         plt.savefig(lidar_plot_file)
         plt.close()
+
+        mae_array.append(np.mean(np.abs(Y_true[i] - Y_pred[i])))
+        rmse_array.append(np.sqrt(np.mean((Y_true[i] - Y_pred[i]) ** 2)))
+        mre_array.append(np.mean(np.abs((Y_true[i] - Y_pred[i]) / (Y_true[i] + 1e-10))) if np.any(Y_true[i]) else 0)
+        
+        range_metrics.append(compute_error_metrics(Y_true[i], Y_pred[i]))
+        
+    mean_absolute_error = np.mean(mae_array)
+    root_mean_square_error = np.mean(rmse_array)
+    mean_relative_error = np.mean(mre_array)
+    print(f"Mean Absolute Error: {mean_absolute_error:.4f}")
+    print(f"Root Mean Square Error: {root_mean_square_error:.4f}")
+    print(f"Mean Relative Error: {mean_relative_error:.4f}")
+    
+    range_metric_accum = {}
+    for results in range_metrics:
+        for range_bin, metrics in results.items():
+            if range_bin not in range_metric_accum:
+                range_metric_accum[range_bin] = {'mae': [], 'rmse': [], 'mre': []}
+            for metric, value in metrics.items():
+                range_metric_accum[range_bin][metric].append(value)
+    
+    range_metrics_average = {
+        range_bin: {
+            metric: float(np.mean(values))
+            for metric, values in metrics.items()
+        }
+        for range_bin, metrics in range_metric_accum.items()
+    }
+    
+    range_metrics_average["all"] = {
+        'mae': mean_absolute_error,
+        'rmse': root_mean_square_error,
+        'mre': mean_relative_error
+    }
     
     # currently broken - will fix later
     #save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, device, feature_names_full, num_epochs, num_layers)
     
     # Save the best model.
-    models_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "models")
+    models_folder = os.path.join("./Echolocation", "Models")
     os.makedirs(models_folder, exist_ok=True)
     model_file = os.path.join(models_folder, f"{chosen_dataset}_{num_epochs}_{num_layers}_model.pth")
     torch.save({
@@ -399,3 +477,22 @@ def model_training(dataset_root_directory, chosen_dataset):
         "hyperparameters": best_hyperparams
     }, model_file)
     print(f"Best model saved to {model_file}")
+    
+    # Saving error metrics to seperate CSV for each range
+    header = ['chirp', 'range', 'best_validation_loss', 'mean_absolute_error', 'root_mean_square_error', 'mean_relative_error']
+    error_metrics_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "error_metrics.csv")
+    for range_bin in range_metrics_average:
+        row = [chosen_dataset, range_bin, best_overall_val_loss, range_metrics_average[range_bin]['mae'], range_metrics_average[range_bin]['rmse'], range_metrics_average[range_bin]['mre']]
+        
+        try:
+            with open(error_metrics_file, 'x', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerow(row)
+        except FileExistsError:
+            with open(error_metrics_file, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+        
+    print("Error metrics saved")
+    print("Model training and evaluation complete.")

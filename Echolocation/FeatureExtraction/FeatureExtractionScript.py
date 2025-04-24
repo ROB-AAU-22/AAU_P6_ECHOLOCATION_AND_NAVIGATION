@@ -86,7 +86,7 @@ def compute_rt60(impulse_response, sr):
         rt60 = -60 / slope if slope != 0 else None
     else:
         rt60 = None
-    return float(rt60) if rt60 is not None else None
+    return float(rt60) if rt60 is not None else 1e-10
 
 def compute_drr(impulse_response, sr):
     # looks like it is calculated correctly but there might be issues with the direct part
@@ -99,7 +99,7 @@ def compute_drr(impulse_response, sr):
         drr = 10 * np.log10(direct_energy / reverberant_energy)
         return float(drr)
     else:
-        return None
+        return 1e-10
 
 def compute_clarity(impulse_response, sr):
     peak_idx = np.argmax(np.abs(impulse_response))
@@ -116,8 +116,8 @@ def compute_clarity(impulse_response, sr):
         C80 = 10 * np.log10(early_energy_80 / (total_energy - early_energy_80 + 1e-10))
     else:
         C80 = None
-    return (float(C50) if C50 is not None else None,
-            float(C80) if C80 is not None else None)
+    return (float(C50) if C50 is not None else 1e-10,
+            float(C80) if C80 is not None else 1e-10)
 
 def compute_room_acoustics_features(impulse_response, sr):
     features = {}
@@ -127,7 +127,7 @@ def compute_room_acoustics_features(impulse_response, sr):
     edt = rt60 / 6 if rt60 is not None else None
     features["rt60_seconds"] = rt60
     features["drr_db"] = drr
-    features["edt_seconds"] = float(edt) if edt is not None else None
+    features["edt_seconds"] = float(edt) if edt is not None else 1e-10
     features["clarity_C50_db"] = C50
     features["clarity_C80_db"] = C80
     return features
@@ -139,12 +139,20 @@ def extract_features(dataset_root_directory, chosen_dataset):
     The extracted features are saved in a CSV file.
     The output CSV file will be saved in the "ExtractedFeatures" folder.
     """
-    output_folder = "./Echolocation/FeatureExtraction/ExtractedFeatures"
+    output_folder = "./Echolocation/FeatureExtraction/ExtractedFeatures/" + chosen_dataset
     os.makedirs(output_folder, exist_ok=True)
     
     records = []
+    skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
+                "263", "283", "396", "441", "465", "472", "477", "502", "522", "527", "538", "645", "668", "686", "697",
+                "713", "876"}  # Add more as needed
     
     for folder_name in os.listdir(dataset_root_directory):
+        folder_id = folder_name.split("_")[1]
+        if folder_id in skip_ids:
+            print(f"Skipping folder: {folder_name}")
+            continue
+
         folder_path = os.path.join(dataset_root_directory, folder_name)
         if not os.path.isdir(folder_path):
             continue
@@ -200,10 +208,10 @@ def extract_features(dataset_root_directory, chosen_dataset):
     print("DataFrame description:")
     print(description)
 
-    description_file = os.path.join(output_folder, chosen_dataset + "_features_description_CSV.txt")
+    description_file = os.path.join(output_folder, "features_description_CSV.txt")
     description.to_csv(description_file, sep="\t")
     print(f"Description saved to {description_file}")
 
-    output_csv = os.path.join(output_folder, chosen_dataset + "_features_all.csv")
+    output_csv = os.path.join(output_folder, "features_all.csv")
     df.to_csv(output_csv, index=False)
     print(f"DataFrame saved to {output_csv}")
