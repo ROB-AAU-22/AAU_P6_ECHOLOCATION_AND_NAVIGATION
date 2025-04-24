@@ -9,7 +9,8 @@ import os
 SAMPLE_RATE = 96000
 NUM_CHANNELS = 2   # Set to 1 for mono, 2 for stereo, etc.
 OUTPUT_FILE = "/home/robot/group_665"
-OUTPUT_FILE= os.path.expanduser("~/group_665/old/sound/Recordings/sample1.wav")
+OUTPUT_FILE = os.path.expanduser("~/group_665/old/sound/Recordings/sample1.wav")
+
 def callback(msg):
     rospy.loginfo("Received audio data")
 
@@ -22,7 +23,7 @@ def callback(msg):
 
     # Save the audio file
     sf.write(OUTPUT_FILE, audio, SAMPLE_RATE, subtype='FLOAT')
-    rospy.loginfo(f"Saved audio to {OUTPUT_FILE}")
+    rospy.loginfo("Saved audio to %s" % OUTPUT_FILE)
 
 def audio_subscriber():
     rospy.init_node('audio_subscriber', anonymous=True)

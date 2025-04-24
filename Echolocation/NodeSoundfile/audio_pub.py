@@ -15,7 +15,7 @@ def audio_publisher():
     msg = AudioData()
     msg.data = data.astype('float32').tobytes()
 
-    rospy.loginfo(f"Publishing audio data with sample rate: {samplerate} Hz, shape: {data.shape}")
+    rospy.loginfo("Publishing audio data with sample rate: %d Hz, shape: %s" % (samplerate, data.shape))
     pub.publish(msg)
 
     rospy.sleep(1)  # allow time for subscriber to receive
