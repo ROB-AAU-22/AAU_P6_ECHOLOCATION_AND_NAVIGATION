@@ -26,15 +26,15 @@ ROSBAG_TOPICS = ["/robot/front_laser/scan_filtered", "/robot/front_rgbd_camera/r
 CHIRPS_CONFIG = {
 	"durations_ms": {
 		#"Short": 1,
-		"MediumShort": 5,
-		"Medium": 10,
-		"MediumLong": 50,
+		#"MediumShort": 5,
+		#"Medium": 10,
+		#"MediumLong": 50,
 		"Long": 100
 	},
 	"frequency_Hz": {
-		"Low": "70Hz-1kHz",
-		"Mid": "1kHz-10kHz",
-		"High": "10kHz-20kHz",
+		#"Low": "70Hz-1kHz",
+		#"Mid": "1kHz-10kHz",
+		#"High": "10kHz-20kHz",
 		"Wide": "70Hz-20kHz"
 	}
 

@@ -5,18 +5,29 @@ import ast
 import math
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Use non-GUI backend for multiprocessing
 import matplotlib.pyplot as plt
-import threading
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from queue import Queue
-from threading import Thread
+from multiprocessing import Process, Queue, cpu_count
+from sklearn.model_selection import train_test_split
+
 
 from sklearn.model_selection import train_test_split
 
-distance_threshold = 2
+DISTANCE_THRESHOLD = 2
+
+import matplotlib
+matplotlib.use('Agg')  # Use non-GUI backend for multiprocessing
+from multiprocessing import Process, Queue, cpu_count
+
+
+
+
 
 # ---------------------------
 # Data Preparation Functions
@@ -101,7 +112,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
             original_distances.append(lidar_vector.copy())  # Store original distances for plotting
 
             # Mark distances above distance_threshold as NaN
-            lidar_vector[lidar_vector > distance_threshold] = np.nan
+            lidar_vector[lidar_vector > DISTANCE_THRESHOLD] = np.nan
 
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
@@ -122,7 +133,7 @@ class MaskedMSELoss(nn.Module):
 
     def forward(self, outputs, targets):
         # Mask values where targets are NaN or greater than distance_threshold
-        mask = ~torch.isnan(targets) & (targets <= distance_threshold)
+        mask = ~torch.isnan(targets)# & (targets <= DISTANCE_THRESHOLD)
         outputs = outputs[mask]
         targets = targets[mask]
         loss = self.mse_loss(outputs, targets)
@@ -175,9 +186,11 @@ class MLPRegressor(nn.Module):
 # ---------------------------
 # Training Function
 # ---------------------------
-def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn, device, num_epochs):
+def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn,
+                device, num_epochs, patience=10, scheduler=None):
     best_val_loss = float("inf")
     best_model_state = None
+    patience_counter = 0
 
     for epoch in range(1, num_epochs + 1):
         model.train()
@@ -188,7 +201,7 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
             optimizer.zero_grad()
             regression_outputs, classification_outputs = model(X_batch)
             regression_loss = regression_loss_fn(regression_outputs, Y_batch)
-            classification_targets = (Y_batch <= distance_threshold).float()
+            classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
             classification_loss = classification_loss_fn(classification_outputs, classification_targets)
             loss = regression_loss + classification_loss
             loss.backward()
@@ -204,7 +217,7 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
                 Y_batch = Y_batch.to(device)
                 regression_outputs, classification_outputs = model(X_batch)
                 regression_loss = regression_loss_fn(regression_outputs, Y_batch)
-                classification_targets = (Y_batch <= distance_threshold).float()
+                classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
                 classification_loss = classification_loss_fn(classification_outputs, classification_targets)
                 loss = regression_loss + classification_loss
                 val_losses.append(loss.item())
@@ -212,11 +225,24 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
 
         print(f"Epoch {epoch}/{num_epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
 
+        # Learning rate scheduling
+        if scheduler is not None:
+            scheduler.step(avg_val_loss)
+
+        # Checkpointing
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_model_state = model.state_dict()
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            print(f"  No improvement. Patience counter: {patience_counter}/{patience}")
+            if patience_counter >= patience:
+                print("  Early stopping triggered.")
+                break
 
     return best_val_loss, best_model_state
+
 
 def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
     model.eval()
@@ -266,6 +292,87 @@ def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):  # 270 d
     y = distances * np.sin(angles)
     return x, y
 
+def plot_worker(queue, worker_id):
+    import matplotlib.pyplot as plt
+    while True:
+        task = queue.get()
+        if task is None:
+            print(f"Worker {worker_id} shutting down")
+            break
+        try:
+            task_type, data = task
+            i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder, best_threshold, chosen_dataset = data
+
+            fig, ax = plt.subplots(figsize=(8, 8) if task_type == 'cartesian' else (10, 6))
+            if task_type == 'cartesian':
+                print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
+                gt_x, gt_y = polar_to_cartesian(Y_true_i)
+                pred_x, pred_y = polar_to_cartesian(Y_pred_i)
+                ignored_gt = original_gt_i > DISTANCE_THRESHOLD
+
+                ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt_i)
+                ax.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o', label='Ignored GT', alpha=0.7, zorder=1)
+                ax.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=2)
+                ax.plot(pred_x, pred_y, label="Predicted LiDAR", linestyle='--', alpha=0.7, zorder=3)
+
+                robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
+                ax.add_patch(robot_circle)
+
+                classified_as_object = classifications_i > best_threshold
+                ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=50, zorder=5, label='Object')
+
+                ax.set_aspect('equal')
+                ax.set_xlabel("X (m)")
+                ax.set_ylabel("Y (m)")
+                ax.set_title(f"{chosen_dataset}-{i}")
+                ax.grid(True)
+                ax.legend()
+            else:
+                print(f"Worker {worker_id} plotting scan index LiDAR for sample {i}...")
+                ax.plot(Y_true_i, label="Ground Truth LiDAR", marker="o")
+                ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
+                ignored_gt = original_gt_i > DISTANCE_THRESHOLD
+                ax.scatter(np.arange(len(original_gt_i))[ignored_gt], original_gt_i[ignored_gt], color='red', marker='o', label='Ignored GT')
+                classified_as_object = classifications_i > best_threshold
+                classified_as_no_object = ~classified_as_object
+                ax.scatter(np.arange(len(Y_pred_i))[classified_as_object], Y_pred_i[classified_as_object], color='green', marker='o', s=50, label='Object')
+                ax.scatter(np.arange(len(Y_pred_i))[classified_as_no_object], Y_pred_i[classified_as_no_object], color='orange', marker='o', s=50, label='Not Object')
+                ax.set_xlabel("Scan Index")
+                ax.set_ylabel("Distance (m)")
+                ax.set_title(f"{chosen_dataset}-{i} \n Epochs: {num_epochs}, Layers: {num_layers}")
+                ax.grid(True)
+                ax.legend()
+
+            plot_type = 'cartesian' if task_type == 'cartesian' else 'scan_index'
+            filename = f"lidar_prediction_{plot_type}_{i}.png"
+            fig.savefig(os.path.join(lidar_plots_folder, filename), bbox_inches='tight')
+            plt.close(fig)
+
+        except Exception as e:
+            print(f"Error in worker {worker_id} for task {i}: {e}")
+
+def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_distances_test, num_epochs, num_layers, cartesian_folder, scan_index_folder, best_threshold, chosen_dataset):
+    start_time = time.time()
+    num_workers = int(cpu_count())
+    print(f"Using {num_workers} multiprocessing workers for plotting")
+
+    task_queue = Queue()
+    workers = [Process(target=plot_worker, args=(task_queue, i)) for i in range(num_workers)]
+    for w in workers:
+        w.start()
+
+    for i in range(len(Y_true)):
+        task_queue.put(('cartesian', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, cartesian_folder, best_threshold, chosen_dataset)))
+        task_queue.put(('scan_index', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, scan_index_folder, best_threshold, chosen_dataset)))
+
+    for _ in range(num_workers):
+        task_queue.put(None)
+
+    for w in workers:
+        w.join()
+
+    print(f"Multiprocessing plotting completed in {time.time() - start_time:.2f} seconds")
+
 def model_training(dataset_root_directory, chosen_dataset):
     # Placeholder function for training the model.
     # This should be replaced with the actual training logic.
@@ -291,15 +398,9 @@ def model_training(dataset_root_directory, chosen_dataset):
     X_train, X_val, Y_train, Y_val, original_distances_train, original_distances_val = train_test_split(X_train_val, Y_train_val, original_distances_train_val, test_size=0.1765, random_state=42)  # 0.1765*0.85 ~ 15%
     print("Training samples: ", X_train.shape[0], "Validation samples: ", X_val.shape[0], "Test samples: ", X_test.shape[0])
 
-    # Create PyTorch datasets and dataloaders
-    batch_size = 16
     train_dataset = AudioLidarDataset(X_train, Y_train)
     val_dataset = AudioLidarDataset(X_val, Y_val)
     test_dataset = AudioLidarDataset(X_test, Y_test)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     input_dim = X.shape[1]
     output_dim = Y.shape[1]
@@ -309,11 +410,12 @@ def model_training(dataset_root_directory, chosen_dataset):
     print(f"Using device: {device}")
 
     # Hyperparameters
-    learning_rates = [0.001]
-    hidden_sizes = [256]
-    num_epochs = 100  # You may adjust epochs
-    num_layers = 2  # Number of hidden layers
-    classification_thresholds = [0.5]  # Thresholds to try
+    learning_rates = [0.01]
+    hidden_sizes = [128]
+    batch_sizes = [32]
+    num_epochs = 200
+    num_layers_list = [2]
+    classification_thresholds = [0.6]
 
     best_overall_val_loss = 0
     best_hyperparams = None
@@ -324,49 +426,77 @@ def model_training(dataset_root_directory, chosen_dataset):
     regression_loss_fn = MaskedMSELoss()
     classification_loss_fn = nn.BCELoss()
 
-    # Grid search over hyperparameters.
+    # Grid search over hyperparameters - now including batch_size and num_layers
     for lr in learning_rates:
         for hidden_size in hidden_sizes:
-            for threshold in classification_thresholds:
-                print(f"\nTraining with learning rate={lr}, hidden_size={hidden_size}, classification_threshold={threshold}")
-                model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
-                optimizer = optim.Adam(model.parameters(), lr=lr)
+            for batch_size in batch_sizes:
+                for num_layers in num_layers_list:
+                    for threshold in classification_thresholds:
+                        print(
+                            f"\nTraining with: lr={lr}, hidden_size={hidden_size}, batch_size={batch_size}, layers={num_layers}, threshold={threshold}")
 
-                val_loss, model_state = train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn, device, num_epochs)
+                        # Create dataloaders with current batch size
+                        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+                        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-                # Evaluate classification accuracy on the validation set
-                model.eval()
-                val_classification_accuracies = []
-                with torch.no_grad():
-                    for X_batch, Y_batch in val_loader:
-                        X_batch = X_batch.to(device)
-                        Y_batch = Y_batch.to(device)
-                        regression_outputs, classification_outputs = model(X_batch)
-                        classification_targets = (Y_batch <= distance_threshold).float()
-                        classification_preds = (classification_outputs > threshold).float()
-                        accuracy = (classification_preds == classification_targets).float().mean().item()
-                        val_classification_accuracies.append(accuracy)
-                avg_val_classification_accuracy = np.mean(val_classification_accuracies)
+                        model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
+                        optimizer = optim.Adam(model.parameters(), lr=lr)
 
-                print(f"Hyperparams (lr={lr}, hidden_size={hidden_size}, threshold={threshold}) - Best Val Loss: {val_loss:.4f}, Val Classification Accuracy: {avg_val_classification_accuracy:.4f}")
+                        # Add scheduler for learning rate
+                        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=10, factor=0.5, verbose=True)
 
-                print("avg val classification accuracy:", avg_val_classification_accuracy, "best overall val loss:", best_overall_val_loss, "best threshold:", best_threshold)
-                # Update best hyperparameters if the current configuration is better
-                if avg_val_classification_accuracy > best_overall_val_loss:
-                    print("New best hyperparameters found!")
-                    best_overall_val_loss = avg_val_classification_accuracy
-                    best_hyperparams = {
-                        "input_dim": input_dim,
-                        "output_dim": output_dim,
-                        "lr": lr,
-                        "hidden_size": hidden_size,
-                        "num_epochs": num_epochs,
-                        "num_layers": num_layers
-                    }
-                    best_model_state = model_state
-                    best_threshold = threshold
+                        # Call with early stopping and learning rate scheduler
+                        val_loss, model_state = train_model(
+                            model,
+                            train_loader,
+                            val_loader,
+                            optimizer,
+                            regression_loss_fn,
+                            classification_loss_fn,
+                            device,
+                            num_epochs,
+                            patience=10,
+                            #scheduler=scheduler
+                        )
 
-    # Check if best_hyperparams is not None before accessing its elements
+                        # Evaluate classification accuracy on the validation set
+                        model.eval()
+                        val_classification_accuracies = []
+                        with torch.no_grad():
+                            for X_batch, Y_batch in val_loader:
+                                X_batch = X_batch.to(device)
+                                Y_batch = Y_batch.to(device)
+                                regression_outputs, classification_outputs = model(X_batch)
+                                classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
+                                classification_preds = (classification_outputs > threshold).float()
+                                accuracy = (classification_preds == classification_targets).float().mean().item()
+                                val_classification_accuracies.append(accuracy)
+                        avg_val_classification_accuracy = np.mean(val_classification_accuracies)
+
+                        print(
+                            f"Hyperparams (lr={lr}, hidden={hidden_size}, batch={batch_size}, layers={num_layers}, thresh={threshold})")
+                        print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {avg_val_classification_accuracy:.4f}")
+
+                        # Update best hyperparameters if the current configuration is better
+                        if avg_val_classification_accuracy > best_overall_val_loss:
+                            print("New best hyperparameters found!")
+                            best_overall_val_loss = avg_val_classification_accuracy
+                            best_hyperparams = {
+                                "input_dim": input_dim,
+                                "output_dim": output_dim,
+                                "lr": lr,
+                                "hidden_size": hidden_size,
+                                "batch_size": batch_size,
+                                "num_epochs": num_epochs,
+                                "num_layers": num_layers
+                            }
+                            best_model_state = model_state
+                            best_threshold = threshold
+
+                            # Create test loader with best batch size for final evaluation
+                            test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    # [Rest of the code remains the same, but update the best_model initialization]
     if best_hyperparams is None:
         print("Error: No valid hyperparameters found during grid search.")
         return
@@ -376,8 +506,11 @@ def model_training(dataset_root_directory, chosen_dataset):
     print(f"Best classification threshold: {best_threshold}")
     print(f"Best validation classification accuracy: {best_overall_val_loss:.4f}")
 
-    # Build the best model and load best state
-    best_model = MLPRegressor(input_dim, best_hyperparams["hidden_size"], output_dim, num_layers=num_layers).to(device)
+    # Build the best model with all best hyperparameters
+    best_model = MLPRegressor(input_dim,
+                              best_hyperparams["hidden_size"],
+                              output_dim,
+                              num_layers=best_hyperparams["num_layers"]).to(device)
     best_model.load_state_dict(best_model_state)
 
     # Evaluate on the test set.
@@ -392,7 +525,7 @@ def model_training(dataset_root_directory, chosen_dataset):
             Y_batch = Y_batch.to(device)
             regression_outputs, classification_outputs = best_model(X_batch)
             regression_loss = regression_loss_fn(regression_outputs, Y_batch)
-            classification_targets = (Y_batch <= distance_threshold).float()
+            classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
             classification_loss = classification_loss_fn(classification_outputs, classification_targets)
             loss = regression_loss + classification_loss
             test_losses.append(loss.item())
@@ -423,110 +556,6 @@ def model_training(dataset_root_directory, chosen_dataset):
     }, model_file)
 
     print("Saving comparison plots...")
-    # Create a queue for plot tasks
-    plot_queue = Queue()
-    # Adjust automatically based on your CPU cores
-    num_workers = int(os.cpu_count()/2)
-
-    def plot_worker(worker_id):
-        while True:
-            task = plot_queue.get()
-            if task is None:  # Sentinel value to stop worker
-                print(f"Worker {worker_id} shutting down")
-                plot_queue.task_done()
-                break
-            try:
-                task_type, data = task
-                i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder = data
-
-                if task_type == 'cartesian':
-                    print(f"Worker {worker_id} saving cartesian plot for sample {i}")
-                    gt_x, gt_y = polar_to_cartesian(Y_true_i)
-                    pred_x, pred_y = polar_to_cartesian(Y_pred_i)
-                    ignored_gt = original_gt_i > distance_threshold
-
-                    plt.figure(figsize=(8, 8))
-                    ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt_i)
-                    plt.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o',
-                                label='Ignored GT', alpha=0.7, zorder=1)
-                    plt.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=2)
-                    plt.plot(pred_x, pred_y, label="Predicted LiDAR", marker='x', linestyle='--', alpha=0.7, zorder=3)
-
-                    robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
-                    plt.gca().add_patch(robot_circle)
-
-                    plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
-                    plt.plot([0, pred_x[0]], [0, pred_y[0]], color='red', linestyle='--', alpha=0.5, zorder=3)
-                    plt.plot([0, gt_x[-1]], [0, gt_y[-1]], color='blue', linestyle='--', alpha=0.5, zorder=3)
-                    plt.plot([0, pred_x[-1]], [0, pred_y[-1]], color='red', linestyle='--', alpha=0.5, zorder=3)
-
-                    plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black',
-                              alpha=1, zorder=4)
-                    plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black',
-                              alpha=1, zorder=4)
-
-                    classified_as_object = classifications_i > best_threshold
-                    classified_as_no_object = ~classified_as_object
-
-                    plt.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o',
-                                s=50, zorder=5, label='Classified as Object')
-                    plt.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange',
-                                marker='o', s=50, zorder=5, label='Classified as No Object')
-
-                    plt.axis('equal')
-                    plt.xlabel("X (m)")
-                    plt.ylabel("Y (m)")
-                    plt.title(f"LiDAR 2D View - Scan {i} : {num_epochs} epochs : {num_layers} layers")
-                    plt.grid(True)
-                    plt.legend()
-
-                    lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_cartesian_{i}.png")
-                    plt.savefig(lidar_plot_file)
-                    plt.close()
-
-                elif task_type == 'scan_index':
-                    print(f"Worker {worker_id} saving scan index plot for sample {i}")
-                    plt.figure(figsize=(10, 6))
-                    plt.plot(Y_true_i, label="Ground Truth LiDAR", marker="o")
-                    plt.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
-
-                    ignored_gt = original_gt_i > distance_threshold
-                    plt.scatter(np.arange(len(original_gt_i))[ignored_gt], original_gt_i[ignored_gt], color='red',
-                                marker='o', label='Ignored GT')
-
-                    classified_as_object = classifications_i > best_threshold
-                    classified_as_no_object = ~classified_as_object
-
-                    plt.scatter(np.arange(len(Y_pred_i))[classified_as_object], Y_pred_i[classified_as_object],
-                                color='green', marker='o', s=50, zorder=5, label='Classified as Object')
-                    plt.scatter(np.arange(len(Y_pred_i))[classified_as_no_object], Y_pred_i[classified_as_no_object],
-                                color='orange', marker='o', s=50, zorder=5, label='Classified as No Object')
-
-                    plt.xlabel("Scan Index")
-                    plt.ylabel("Distance (m)")
-                    plt.title(f"LiDAR Scan {i} : {num_epochs} epochs : {num_layers} layers")
-                    plt.legend()
-                    plt.grid(True)
-
-                    lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_{i}.png")
-                    plt.savefig(lidar_plot_file)
-                    plt.close()
-
-            except Exception as e:
-                print(f"Worker {worker_id} encountered error with sample {i}: {e}")
-            finally:
-                plot_queue.task_done()
-
-    # Start worker threads with IDs
-    workers = []
-    for worker_id in range(num_workers):
-        t = Thread(target=plot_worker, args=(worker_id,))
-        t.start()
-        workers.append(t)
-        print(f"Started worker thread {worker_id}")
-
-    print("Saving comparison plots using multi-threading...")
-
     # Create folders
     cartesian_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures",
                                     f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "cartesian")
@@ -534,27 +563,27 @@ def model_training(dataset_root_directory, chosen_dataset):
                                      f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "scan_index")
     os.makedirs(cartesian_folder, exist_ok=True)
     os.makedirs(scan_index_folder, exist_ok=True)
+    # Create a queue for plot tasks
+    #plot_queue = Queue()
+    # Adjust worker count based on actual CPU cores and I/O limitations
+    #num_workers = os.cpu_count()  # Limit to 4 workers for I/O-bound tasks
+    #print(f"Using {num_workers} worker threads for plotting")
 
-    # Add plot tasks to queue
-    for i in range(len(Y_true)):
-        plot_queue.put(('cartesian',
-                        (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i],
-                         num_epochs, num_layers, cartesian_folder)))
-        plot_queue.put(('scan_index',
-                        (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i],
-                         num_epochs, num_layers, scan_index_folder)))
 
-    # Wait for all tasks to complete
-    plot_queue.join()
-
-    # Stop workers
-    for _ in range(num_workers):
-        plot_queue.put(None)
-    for t in workers:
-        t.join()
+    # Create and start workers
+    start_multiprocessing_plotting(
+        Y_true, Y_pred, classifications, original_distances_test,
+        num_epochs, num_layers, cartesian_folder, scan_index_folder,
+        best_threshold, chosen_dataset
+    )
 
     print(f"Best model saved to {model_file}")
 
     # Evaluate classification accuracy
-    classification_accuracy = (classifications.round() == (Y_true <= distance_threshold)).mean()
+    classification_accuracy = (classifications.round() == (Y_true <= DISTANCE_THRESHOLD)).mean()
     print(f"Classification Accuracy: {classification_accuracy:.4f}")
+    print("\nBest hyperparameters found:")
+    print(best_hyperparams)
+    print(f"Best classification threshold: {best_threshold}")
+    print(f"Best validation classification accuracy: {best_overall_val_loss:.4f}")
+    print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
