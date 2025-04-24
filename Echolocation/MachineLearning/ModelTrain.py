@@ -585,16 +585,16 @@ def model_training(dataset_root_directory, chosen_dataset):
     range_metrics = []
     
     for i in range(len(Y_true)):
-
-        mae_array.append(np.mean(np.abs(Y_true[i] - Y_pred[i])))
-        rmse_array.append(np.sqrt(np.mean((Y_true[i] - Y_pred[i]) ** 2)))
-        mre_array.append(np.mean(np.abs((Y_true[i] - Y_pred[i]) / (Y_true[i] + 1e-10))) if np.any(Y_true[i]) else 0)
+        # add all non nan numbers to array
+        mae_array.append(np.nanmean(np.abs(Y_true[i] - Y_pred[i])))
+        rmse_array.append(np.sqrt(np.nanmean((Y_true[i] - Y_pred[i]) ** 2)))
+        mre_array.append(np.nanmean(np.abs((Y_true[i] - Y_pred[i]) / (Y_true[i] + 1e-10))) if np.any(Y_true[i]) else 0)
         
         range_metrics.append(compute_error_metrics(Y_true[i], Y_pred[i]))
-        
-    mean_absolute_error = np.mean(mae_array)
-    root_mean_square_error = np.mean(rmse_array)
-    mean_relative_error = np.mean(mre_array)
+
+    mean_absolute_error = np.nanmean(mae_array)
+    root_mean_square_error = np.nanmean(rmse_array)
+    mean_relative_error = np.nanmean(mre_array)
     print(f"Mean Absolute Error: {mean_absolute_error:.4f}")
     print(f"Root Mean Square Error: {root_mean_square_error:.4f}")
     print(f"Mean Relative Error: {mean_relative_error:.4f}")
