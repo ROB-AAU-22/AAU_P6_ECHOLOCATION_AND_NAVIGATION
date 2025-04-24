@@ -160,7 +160,7 @@ def extract_features(dataset_root_directory, chosen_dataset):
         if not os.path.isdir(folder_path):
             continue
 
-        print("Extracting features for data in folder: ", folder_path)
+        #print("Extracting features for data in folder: ", folder_path)
 
         wav_file_path = None
 

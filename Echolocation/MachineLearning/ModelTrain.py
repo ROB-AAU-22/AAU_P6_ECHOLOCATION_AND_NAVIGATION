@@ -11,6 +11,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from queue import Queue
+from threading import Thread
 
 from sklearn.model_selection import train_test_split
 
@@ -59,7 +61,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
         lidar_filename = f"{filename}_distance_data.json"
         lidar_file = os.path.join(dataset_root, filename, lidar_filename)
 
-        print(f"Processing file: {filename}")
+        #print(f"Processing file: {filename}")
 
         feature_vector = []
         feature_names_row = []
@@ -405,82 +407,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     Y_true = np.concatenate(all_targets, axis=0)
     classifications = np.concatenate(all_classifications, axis=0)
 
-    # Post-process predictions to mark values > distance_threshold as indicating no detection
-    #Y_pred[Y_pred > distance_threshold] = np.nan
 
-    print("Saving comparison plots...")
-    for i in range(len(Y_true)):
-        gt_x, gt_y = polar_to_cartesian(Y_true[i])
-        pred_x, pred_y = polar_to_cartesian(Y_pred[i])
-        # Highlight ignored points (distances above distance_threshold) using original distances
-        original_gt = original_distances_test[i]
-        ignored_gt = original_gt > distance_threshold
-
-        plt.figure(figsize=(8, 8))
-        ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt)
-        plt.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o', label='Ignored GT',alpha=0.7, zorder=1)
-        plt.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=2)
-        plt.plot(pred_x, pred_y, label="Predicted LiDAR", marker='x', linestyle='--', alpha=0.7, zorder=3)
-
-        # Draw robot as a small circle at the origin
-        robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
-        plt.gca().add_patch(robot_circle)
-
-        # draw a line from origin to first scan point
-        plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
-        plt.plot([0, pred_x[0]], [0, pred_y[0]], color='red', linestyle='--', alpha=0.5, zorder=3)
-        # draw a line from origin to last scan point
-        plt.plot([0, gt_x[-1]], [0, gt_y[-1]], color='blue', linestyle='--', alpha=0.5, zorder=3)
-        plt.plot([0, pred_x[-1]], [0, pred_y[-1]], color='red', linestyle='--', alpha=0.5, zorder=3)
-
-        # draw an arrow vector from origin to middle point(s)
-        plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
-        plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
-
-        # Add classification markers
-        classified_as_object = classifications[i] > best_threshold
-        classified_as_no_object = ~classified_as_object
-
-        plt.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=50, zorder=5, label='Classified as Object')
-        plt.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange', marker='o', s=50, zorder=5, label='Classified as No Object')
-
-        plt.axis('equal')
-        plt.xlabel("X (m)")
-        plt.ylabel("Y (m)")
-        plt.title(f"LiDAR 2D View - Scan {i} : {num_epochs} epochs : {num_layers} layers")
-        plt.grid(True)
-        plt.legend()
-
-        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "cartesian")
-        os.makedirs(lidar_plots_folder, exist_ok=True)
-        lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_cartesian_{i}.png")
-        print(f"Saving cartesian LiDAR plot to {lidar_plot_file}")
-        plt.savefig(lidar_plot_file)
-        plt.close()
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(Y_true[i], label="Ground Truth LiDAR", marker="o")
-        plt.plot(Y_pred[i], label="Predicted LiDAR", linestyle="--", marker="x")
-
-        # Highlight ignored points (distances above distance_threshold) using original distances
-        plt.scatter(np.arange(len(original_gt))[ignored_gt], original_gt[ignored_gt], color='red', marker='o', label='Ignored GT')
-
-        # Add classification markers
-        plt.scatter(np.arange(len(Y_pred[i]))[classified_as_object], Y_pred[i][classified_as_object], color='green', marker='o', s=50, zorder=5, label='Classified as Object')
-        plt.scatter(np.arange(len(Y_pred[i]))[classified_as_no_object], Y_pred[i][classified_as_no_object], color='orange', marker='o', s=50, zorder=5, label='Classified as No Object')
-
-        plt.xlabel("Scan Index")
-        plt.ylabel("Distance (m)")
-        plt.title(f"LiDAR Scan {i} : {num_epochs} epochs : {num_layers} layers")
-        plt.legend()
-        plt.grid(True)
-
-        lidar_plots_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "scan_index")
-        os.makedirs(lidar_plots_folder, exist_ok=True)
-        lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_{i}.png")
-        print(f"Saving regular LiDAR plot to {lidar_plot_file}")
-        plt.savefig(lidar_plot_file)
-        plt.close()
 
     # currently broken - will fix later
     #save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, device, feature_names_full, num_epochs, num_layers)
@@ -494,6 +421,138 @@ def model_training(dataset_root_directory, chosen_dataset):
         "hyperparameters": best_hyperparams,
         "classification_threshold": best_threshold
     }, model_file)
+
+    print("Saving comparison plots...")
+    # Create a queue for plot tasks
+    plot_queue = Queue()
+    # Adjust automatically based on your CPU cores
+    num_workers = int(os.cpu_count()/2)
+
+    def plot_worker(worker_id):
+        while True:
+            task = plot_queue.get()
+            if task is None:  # Sentinel value to stop worker
+                print(f"Worker {worker_id} shutting down")
+                plot_queue.task_done()
+                break
+            try:
+                task_type, data = task
+                i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder = data
+
+                if task_type == 'cartesian':
+                    print(f"Worker {worker_id} saving cartesian plot for sample {i}")
+                    gt_x, gt_y = polar_to_cartesian(Y_true_i)
+                    pred_x, pred_y = polar_to_cartesian(Y_pred_i)
+                    ignored_gt = original_gt_i > distance_threshold
+
+                    plt.figure(figsize=(8, 8))
+                    ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt_i)
+                    plt.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o',
+                                label='Ignored GT', alpha=0.7, zorder=1)
+                    plt.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=2)
+                    plt.plot(pred_x, pred_y, label="Predicted LiDAR", marker='x', linestyle='--', alpha=0.7, zorder=3)
+
+                    robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
+                    plt.gca().add_patch(robot_circle)
+
+                    plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+                    plt.plot([0, pred_x[0]], [0, pred_y[0]], color='red', linestyle='--', alpha=0.5, zorder=3)
+                    plt.plot([0, gt_x[-1]], [0, gt_y[-1]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+                    plt.plot([0, pred_x[-1]], [0, pred_y[-1]], color='red', linestyle='--', alpha=0.5, zorder=3)
+
+                    plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black',
+                              alpha=1, zorder=4)
+                    plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black',
+                              alpha=1, zorder=4)
+
+                    classified_as_object = classifications_i > best_threshold
+                    classified_as_no_object = ~classified_as_object
+
+                    plt.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o',
+                                s=50, zorder=5, label='Classified as Object')
+                    plt.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange',
+                                marker='o', s=50, zorder=5, label='Classified as No Object')
+
+                    plt.axis('equal')
+                    plt.xlabel("X (m)")
+                    plt.ylabel("Y (m)")
+                    plt.title(f"LiDAR 2D View - Scan {i} : {num_epochs} epochs : {num_layers} layers")
+                    plt.grid(True)
+                    plt.legend()
+
+                    lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_cartesian_{i}.png")
+                    plt.savefig(lidar_plot_file)
+                    plt.close()
+
+                elif task_type == 'scan_index':
+                    print(f"Worker {worker_id} saving scan index plot for sample {i}")
+                    plt.figure(figsize=(10, 6))
+                    plt.plot(Y_true_i, label="Ground Truth LiDAR", marker="o")
+                    plt.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
+
+                    ignored_gt = original_gt_i > distance_threshold
+                    plt.scatter(np.arange(len(original_gt_i))[ignored_gt], original_gt_i[ignored_gt], color='red',
+                                marker='o', label='Ignored GT')
+
+                    classified_as_object = classifications_i > best_threshold
+                    classified_as_no_object = ~classified_as_object
+
+                    plt.scatter(np.arange(len(Y_pred_i))[classified_as_object], Y_pred_i[classified_as_object],
+                                color='green', marker='o', s=50, zorder=5, label='Classified as Object')
+                    plt.scatter(np.arange(len(Y_pred_i))[classified_as_no_object], Y_pred_i[classified_as_no_object],
+                                color='orange', marker='o', s=50, zorder=5, label='Classified as No Object')
+
+                    plt.xlabel("Scan Index")
+                    plt.ylabel("Distance (m)")
+                    plt.title(f"LiDAR Scan {i} : {num_epochs} epochs : {num_layers} layers")
+                    plt.legend()
+                    plt.grid(True)
+
+                    lidar_plot_file = os.path.join(lidar_plots_folder, f"lidar_prediction_{i}.png")
+                    plt.savefig(lidar_plot_file)
+                    plt.close()
+
+            except Exception as e:
+                print(f"Worker {worker_id} encountered error with sample {i}: {e}")
+            finally:
+                plot_queue.task_done()
+
+    # Start worker threads with IDs
+    workers = []
+    for worker_id in range(num_workers):
+        t = Thread(target=plot_worker, args=(worker_id,))
+        t.start()
+        workers.append(t)
+        print(f"Started worker thread {worker_id}")
+
+    print("Saving comparison plots using multi-threading...")
+
+    # Create folders
+    cartesian_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures",
+                                    f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "cartesian")
+    scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures",
+                                     f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "scan_index")
+    os.makedirs(cartesian_folder, exist_ok=True)
+    os.makedirs(scan_index_folder, exist_ok=True)
+
+    # Add plot tasks to queue
+    for i in range(len(Y_true)):
+        plot_queue.put(('cartesian',
+                        (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i],
+                         num_epochs, num_layers, cartesian_folder)))
+        plot_queue.put(('scan_index',
+                        (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i],
+                         num_epochs, num_layers, scan_index_folder)))
+
+    # Wait for all tasks to complete
+    plot_queue.join()
+
+    # Stop workers
+    for _ in range(num_workers):
+        plot_queue.put(None)
+    for t in workers:
+        t.join()
+
     print(f"Best model saved to {model_file}")
 
     # Evaluate classification accuracy
