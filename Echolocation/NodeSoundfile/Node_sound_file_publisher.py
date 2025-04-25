@@ -7,7 +7,7 @@ import os
 sound_folder = os.path.expanduser("~/group_665/old/sound/dataset/")
 
 # Chunk size for large files (in bytes)
-CHUNK_SIZE = 1024 * 1024  # 1MB chunks
+CHUNK_SIZE = 1024  # 1MB chunks
 
 def publish_raw_sound_files():
     rospy.init_node('sound_file_raw_publisher')
