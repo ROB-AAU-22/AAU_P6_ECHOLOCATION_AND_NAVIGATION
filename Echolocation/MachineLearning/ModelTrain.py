@@ -55,15 +55,18 @@ def build_dataset_from_csv(csv_file, dataset_root):
     feature_cols = [col for col in df.columns if col != "filename"]
 
     # Set of sample numbers to skip
-    #skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "522", "527", "538", "645", "668", "686", "697", "713", "876"}  # Add more as needed
-    skip_ids = {"188", "203" ,"1196", "1214", "1248"}
-    
+    # skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
+    #            "263", "283", "396", "441", "465", "472", "477", "502", "522", "527", "538", "645", "668", "686", "697",
+    #            "713", "876"}  # Add more as needed
+
+    #skip_ids = {"188", "203" ,"1196", "1214", "1243"}
+
     for idx, row in df.iterrows():
         filename = row["filename"]
-        
-        if any(f"_{sid}_" in filename for sid in skip_ids):
-            print(f"Skipping file due to skip list: {filename}")
-            continue
+
+        #if any(f"_{sid}_" in filename for sid in skip_ids):
+        #    print(f"Skipping file due to skip list: {filename}")
+        #    continue
 
         lidar_filename = f"{filename}_distance_data.json"
         lidar_file = os.path.join(dataset_root, filename, lidar_filename)
@@ -224,6 +227,7 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
         # Learning rate scheduling
         if scheduler is not None:
             scheduler.step(avg_val_loss)
+            print(f"  Learning rate: {scheduler.get_last_lr()[0]:.6f}")
 
         # Checkpointing
         if avg_val_loss < best_val_loss:
@@ -335,7 +339,11 @@ def plot_worker(queue, worker_id):
                           alpha=1, zorder=4)
 
                 classified_as_object = classifications_i > best_threshold
-                ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=50, zorder=5, label='Object')
+                classified_as_no_object = ~classified_as_object
+                ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object],
+                           color='green', marker='o', s=30, label='Object')
+                ax.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object],
+                           color='orange', marker='o', s=30, label='Not Object')
 
                 ax.set_aspect('equal')
                 ax.set_xlabel("X (m)")
@@ -457,11 +465,11 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     # Hyperparameters
     learning_rates = [0.01]
-    hidden_sizes = [128]
-    batch_sizes = [32]
+    hidden_sizes = [128, 256]
+    batch_sizes = [16, 32, 64, 128]
     num_epochs = 200
     num_layers_list = [2]
-    classification_thresholds = [0.6]
+    classification_thresholds = [0.5,0.6]
 
     best_overall_val_loss = 0
     best_hyperparams = None
@@ -489,7 +497,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                         optimizer = optim.Adam(model.parameters(), lr=lr)
 
                         # Add scheduler for learning rate
-                        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=10, factor=0.5, verbose=True)
+                        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.1, verbose=True)
 
                         # Call with early stopping and learning rate scheduler
                         val_loss, model_state = train_model(
@@ -585,9 +593,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     Y_pred = np.concatenate(all_preds, axis=0)
     Y_true = np.concatenate(all_targets, axis=0)
     classifications = np.concatenate(all_classifications, axis=0)
-    
-    print("Saving comparison plots...")
-    
+
     mae_array = []
     rmse_array = []
     mre_array = []
