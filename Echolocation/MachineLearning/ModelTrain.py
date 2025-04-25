@@ -56,7 +56,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
 
     # Set of sample numbers to skip
     #skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "522", "527", "538", "645", "668", "686", "697", "713", "876"}  # Add more as needed
-    skip_ids = {"203", "1196", "1248"}
+    skip_ids = {"188", "203" ,"1196", "1214", "1248"}
     
     for idx, row in df.iterrows():
         filename = row["filename"]
