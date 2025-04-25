@@ -54,17 +54,17 @@ def compute_spatial_features(left_signal, right_signal, sr):
     lag = lag_idx - (len(left_signal) - 1)
     itd = lag / sr + 1e-10  # Avoid division by zero
     features["itd_seconds"] = float(itd)
-    
+
     # ILD: difference in RMS energy in dB
     rms_left = np.sqrt(np.mean(left_signal**2))
     rms_right = np.sqrt(np.mean(right_signal**2))
     ild = 20 * np.log10(rms_left / (rms_right + 1e-10))
     features["ild_db"] = float(ild)
-    
+
     # Interaural Coherence using scipy's coherence function
     _, coh = coherence(left_signal, right_signal, fs=sr, nperseg=1024)
     features["interaural_coherence_mean"] = float(np.mean(coh))
-    
+
     ## Phase Difference: average phase difference over STFT frames
     #stft_left = librosa.stft(left_signal, n_fft=2048, hop_length=512)
     #stft_right = librosa.stft(right_signal, n_fft=2048, hop_length=512)
@@ -144,10 +144,11 @@ def extract_features(dataset_root_directory, chosen_dataset):
     os.makedirs(output_folder, exist_ok=True)
 
     records = []
-    """ skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
-                "263", "283", "396", "441", "465", "472", "477", "502", "522", "527", "538", "645", "668", "686", "697",
-                "713", "876"}  # Add more as needed """
-    skip_ids = {"203", "1196", "1248"}
+    #skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
+    #            "263", "283", "396", "441", "465", "472", "477", "502", "522", "527", "538", "645", "668", "686", "697",
+    #            "713", "876"}  # Add more as needed
+
+    skip_ids = {"188", "203" ,"1196", "1214", "1248"}
     
     for folder_name in os.listdir(dataset_root_directory):
         folder_id = folder_name.split("_")[1]
@@ -199,6 +200,9 @@ def extract_features(dataset_root_directory, chosen_dataset):
 
         except Exception as e:
             print("Error processing ", folder_name, ": ", e)
+            continue
+        except RuntimeWarning as r:
+            print("Error processing ", folder_name, ": ", r)
             continue
 
     df = pd.json_normalize(records, sep="_")
