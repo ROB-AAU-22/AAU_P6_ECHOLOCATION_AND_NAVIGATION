@@ -325,6 +325,26 @@ def plot_worker(queue, worker_id):
                 robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
                 ax.add_patch(robot_circle)
 
+                # draw a line from origin to first scan point
+
+                plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+
+                plt.plot([0, pred_x[0]], [0, pred_y[0]], color='red', linestyle='--', alpha=0.5, zorder=3)
+
+                # draw a line from origin to last scan point
+
+                plt.plot([0, gt_x[-1]], [0, gt_y[-1]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+
+                plt.plot([0, pred_x[-1]], [0, pred_y[-1]], color='red', linestyle='--', alpha=0.5, zorder=3)
+
+                # draw an arrow vector from origin to middle point(s)
+
+                plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1,
+                          zorder=4)
+
+                plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black',
+                          alpha=1, zorder=4)
+
                 classified_as_object = classifications_i > best_threshold
                 ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=50, zorder=5, label='Object')
 
