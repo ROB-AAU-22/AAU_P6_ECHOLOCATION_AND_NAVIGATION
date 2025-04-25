@@ -144,9 +144,10 @@ def extract_features(dataset_root_directory, chosen_dataset):
     os.makedirs(output_folder, exist_ok=True)
 
     records = []
-    skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
+    """ skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
                 "263", "283", "396", "441", "465", "472", "477", "502", "522", "527", "538", "645", "668", "686", "697",
-                "713", "876"}  # Add more as needed
+                "713", "876"}  # Add more as needed """
+    skip_ids = {"203", "1196", "1248"}
     
     for folder_name in os.listdir(dataset_root_directory):
         folder_id = folder_name.split("_")[1]

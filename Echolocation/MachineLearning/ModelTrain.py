@@ -2,7 +2,6 @@
 import os
 import json
 import ast
-import math
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -18,18 +17,11 @@ from torch.utils.data import Dataset, DataLoader
 from multiprocessing import Process, Queue, cpu_count
 from sklearn.model_selection import train_test_split
 
-
-from sklearn.model_selection import train_test_split
-from scipy.stats import pearsonr
-
 DISTANCE_THRESHOLD = 2
 
 import matplotlib
 matplotlib.use('Agg')  # Use non-GUI backend for multiprocessing
 from multiprocessing import Process, Queue, cpu_count
-
-
-
 
 
 # ---------------------------
@@ -63,11 +55,12 @@ def build_dataset_from_csv(csv_file, dataset_root):
     feature_cols = [col for col in df.columns if col != "filename"]
 
     # Set of sample numbers to skip
-    skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "522", "527", "538", "645", "668", "686", "697", "713", "876"}  # Add more as needed
+    #skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "522", "527", "538", "645", "668", "686", "697", "713", "876"}  # Add more as needed
+    skip_ids = {"203", "1196", "1248"}
     
     for idx, row in df.iterrows():
         filename = row["filename"]
-
+        
         if any(f"_{sid}_" in filename for sid in skip_ids):
             print(f"Skipping file due to skip list: {filename}")
             continue
@@ -375,6 +368,7 @@ def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_dis
         w.join()
 
     print(f"Multiprocessing plotting completed in {time.time() - start_time:.2f} seconds")
+
 def compute_error_metrics(Y_true, Y_pred):
     range_bins = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
     results = {f"{low}_{high}": {'y_true': [], 'y_pred': []} for low, high in range_bins}
@@ -636,10 +630,8 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     print("Saving comparison plots...")
     # Create folders
-    cartesian_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures",
-                                    f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "cartesian")
-    scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures",
-                                     f"{chosen_dataset}_lidar_plots_{num_epochs}_{num_layers}", "scan_index")
+    cartesian_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"cartesian_plots_{num_epochs}_{num_layers}")
+    scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"scan_index_plots_{num_epochs}_{num_layers}")
     os.makedirs(cartesian_folder, exist_ok=True)
     os.makedirs(scan_index_folder, exist_ok=True)
     # Create a queue for plot tasks
