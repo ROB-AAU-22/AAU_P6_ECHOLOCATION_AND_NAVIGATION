@@ -5,8 +5,8 @@ import numpy as np
 import sounddevice as sd
 from scipy.io import wavfile
 from scipy.io.wavfile import write
-
-# from LidarNode import LaserScanListener
+from LidarNode import LaserScanListener
+from ROSbag import start_recording, stop_recording
 
 # Constants
 NUM_SWEEPS = 1
@@ -18,25 +18,27 @@ DATASET_SOUND_FILE = "{}_sound.wav"
 DATASET_DISTANCE_FILE = "{}_distance_data.json"
 DATASET_ANGLE_FILE = "{}_angle_data.json"
 CONFIG_FILE = "{}_config.json"
+BAG_FILE = "{}_bag.bag"
 WAIT = 0
+ROSBAG_TOPICS = ["/robot/front_laser/scan_filtered", "/robot/front_rgbd_camera/rgb/image_raw",
+              "/robot/front_rgbd_camera/depth_registered/points"]
 
 CHIRPS_CONFIG = {
-    "durations_ms": {
-        "Short": 1,
-        "MediumShort": 5,
-        "Medium": 10,
-        "MediumLong": 50,
-        "Long": 100
-    },
-    "frequency_Hz": {
-        "Low": "70Hz-1kHz",
-        "Mid": "1kHz-10kHz",
-        "High": "10kHz-20kHz",
-        "Wide": "70Hz-20kHz"
-    }
+	"durations_ms": {
+		#"Short": 1,
+		#"MediumShort": 5,
+		#"Medium": 10,
+		#"MediumLong": 50,
+		"Long": 100
+	},
+	"frequency_Hz": {
+		#"Low": "70Hz-1kHz",
+		#"Mid": "1kHz-10kHz",
+		#"High": "10kHz-20kHz",
+		"Wide": "70Hz-20kHz"
+	}
 
 }
-
 
 # Initialize LaserScanListener
 laser_scan_listener = LaserScanListener(FILE_DIR)
@@ -72,7 +74,7 @@ def create_batch_directory(base_dir, batch_id):
     Ensures the directory exists before returning the path.
     """
     batch_directory = os.path.join(base_dir, batch_id)
-    os.makedirs(batch_directory, exist_ok=True)
+    os.makedirs(batch_directory)#, exist_ok=True)
     return batch_directory
 
 
@@ -83,19 +85,31 @@ def generate_batch():
     2. Fetching and saving LiDAR data.
     3. Writing a configuration file with metadata for the batch.
     """
-    time_start = time.time()
-    timestamp = int(time_start)
+    timestamp = int(time.time())
     completed_batches = []
+
+    # generate id for ROSbag
+    ROSbag_dir_name = "ROSbags"
+    ROSbag_dir_path = os.path.join(FILE_DIR, ROSbag_dir_name)
+    os.makedirs(ROSbag_dir_path, exist_ok=True)
+
+    # Generate a unique batch ID based on the current timestamp and subdirectory count
+    subdirectory_count_rosbag = len(
+        [d for d in os.listdir(ROSbag_dir_path) if os.path.isdir(os.path.join(ROSbag_dir_path, d))]) + 1 \
+        if os.path.exists(ROSbag_dir_path) else 1
+    batch_id_rosbag = f"{int(timestamp)}_{subdirectory_count_rosbag}"
+    start_recording(BAG_FILE.format(batch_id_rosbag), ROSBAG_TOPICS) # start recording rosbag
+
 
     for duration_name, duration_value in CHIRPS_CONFIG["durations_ms"].items():
         for freq_name, freq_range in CHIRPS_CONFIG["frequency_Hz"].items():
             # wait
-            print("Waiting for {} seconds...".format(WAIT))
-            # time.sleep(WAIT)
+            #print("Waiting for {} seconds...".format(WAIT))
+            #time.sleep(WAIT)
 
             config_dir_name = f"{freq_name}_{duration_name}"
             config_dir_path = os.path.join(FILE_DIR, config_dir_name)
-            os.makedirs(config_dir_path, exist_ok=True)
+            os.makedirs(config_dir_path , exist_ok=True)
 
             # Generate a unique batch ID based on the current timestamp and subdirectory count
             subdirectory_count = len(
@@ -111,13 +125,13 @@ def generate_batch():
 
             # --- STEP 2: Fetch LiDAR data and calculate angles ---
             # Use the LaserScanListener to receive and process LiDAR data
-            laser_distance = laser_scan_listener.receive_laser_scan()
-            laser_angle = laser_scan_listener.angle_measurement(laser_distance)
+            # laser_distance = laser_scan_listener.receive_laser_scan()
+            # laser_angle = laser_scan_listener.angle_measurement(laser_distance)
             config_distance = {
-                "LiDAR_distance": laser_distance,  # LiDAR distance data
+                "LiDAR_distance": "laser_distance",  # LiDAR distance data
             }
             config_angle = {
-                "LiDAR_angle": laser_angle,  # LiDAR angle data
+                "LiDAR_angle": "laser_angle",  # LiDAR angle data
             }
 
             # Collect all batch data
@@ -164,8 +178,10 @@ def generate_batch():
 
         #print("Batch saved: {}".format(batch["batch_id"]))
 
-    print("Entire batch saved in {} seconds: {}_{}".format(int(time.time() - time_start), timestamp, subdirectory_count))
-
+    # stop recording ROSbag
+    stop_recording(None)
+    print("Entire batch saved: {}_{}".format(timestamp, subdirectory_count))
+    
 
 if __name__ == '__main__':
     generate_batch()
