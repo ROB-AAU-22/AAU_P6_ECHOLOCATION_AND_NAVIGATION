@@ -2,23 +2,30 @@
 import rospy
 import soundfile as sf
 from audio_common_msgs.msg import AudioData
-import os
 
 def audio_publisher():
     rospy.init_node('audio_publisher', anonymous=True)
-    pub = rospy.Publisher('audio_data', AudioData, queue_size=10)
-    #data, samplerate = os.path.expanduser("~/group_665/old/sound/Recordings/sample1.wav")
-    # Load the .wav file as float32 audio
-    data, samplerate = sf.read("/home/robot/group_665/old/sound/recordings/sample1.wav", dtype='float32')  # e.g. shape = (samples, channels) or (samples,)
+    pub_audio = rospy.Publisher('audio_data', AudioData, queue_size=10)
 
-    # Convert float32 data to bytes
+    file_path = "/home/robot/group_665/old/sound/recordings/sample1.wav"
+    data, samplerate = sf.read(file_path, dtype='float32')
+
+    # Determine number of channels and samples
+    if len(data.shape) == 1:
+        num_channels = 1
+        num_samples = data.shape[0]
+    else:
+        num_channels = data.shape[1]
+        num_samples = data.shape[0]
+
+    # Publish audio data
     msg = AudioData()
-    msg.data = data.astype('float32').tobytes()
+    msg.data = bytearray(data.astype('float32').tobytes())
+    rospy.loginfo("Published audio: sample_rate=%d, channels=%d, samples=%d" %
+                  (samplerate, num_channels, num_samples))
+    pub_audio.publish(msg)
 
-    rospy.loginfo("Publishing audio data with sample rate: %d Hz, shape: %s" % (samplerate, data.shape))
-    pub.publish(msg)
-
-    rospy.sleep(1)  # allow time for subscriber to receive
+    rospy.sleep(1.0)  # sleep to allow transmission
 
 if __name__ == '__main__':
     try:

@@ -1,70 +1,67 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+""" ROS1 (Melodic) WAV file publisher using ByteMultiArray """
 import rospy
 from std_msgs.msg import ByteMultiArray
-import os
 
-# Expand ~ to the user's home directory
-sound_folder = os.path.expanduser("~/group_665/old/sound/dataset/")
+# Configuration: adjust topic name, file path, and chunk size if needed
+TOPIC_NAME = "wav_bytes"
+FILE_PATH  = rospy.get_param("~file_path", "input.wav")    # WAV file to send (path can be overridden via ROS param)
+CHUNK_SIZE = rospy.get_param("~chunk_size", 1024*1024)     # safe chunk size threshold in bytes (default 1 MB)
 
-# Chunk size for large files (in bytes)
-CHUNK_SIZE = 1024  # 1MB chunks
+def main():
+    rospy.init_node("wav_file_publisher", anonymous=False)
+    pub = rospy.Publisher(TOPIC_NAME, ByteMultiArray, queue_size=10)
+    rospy.loginfo("Starting WAV file publisher...")
 
-def publish_raw_sound_files():
-    rospy.init_node('sound_file_raw_publisher')
-    pub = rospy.Publisher('/sound_file_raw', ByteMultiArray, queue_size=10)
-    rate = rospy.Rate(0.1)  # 0.1 Hz = 1 file every 10 seconds
-
-    # Check if folder exists
-    if not os.path.exists(sound_folder):
-        rospy.logerr("Folder not found: %s" % sound_folder)
+    # Read the full WAV file as binary data (including header and audio samples)
+    try:
+        with open(FILE_PATH, "rb") as f:
+            data = f.read()
+    except Exception as e:
+        rospy.logerr("Failed to read file '%s': %s", FILE_PATH, str(e))
         return
 
-    wav_files_found = False
+    total_bytes = len(data)
+    if total_bytes == 0:
+        rospy.logwarn("File '%s' is empty, nothing to send.", FILE_PATH)
+        return
 
-    # Iterate over files in the folder
-    for filename in os.listdir(sound_folder):
-        if filename.endswith('.wav'):
-            wav_files_found = True
-            full_path = os.path.join(sound_folder, filename)
-            rospy.loginfo("Found file: %s" % filename)
+    # Determine if we need to split into chunks
+    if total_bytes > CHUNK_SIZE:
+        total_chunks = (total_bytes + CHUNK_SIZE - 1) // CHUNK_SIZE  # round up division
+        rospy.loginfo("File size %d bytes exceeds chunk threshold. Splitting into %d chunks of up to %d bytes.",
+                      total_bytes, total_chunks, CHUNK_SIZE)
+    else:
+        total_chunks = 1
+        rospy.loginfo("File size %d bytes is within threshold. Sending in a single chunk.", total_bytes)
 
-            try:
-                with open(full_path, 'rb') as f:
-                    data = f.read()  # Read the entire file into memory
-                    # Check if file is too large
-                    if len(data) > CHUNK_SIZE:
-                        rospy.logwarn("File is too large, splitting into chunks: %s" % filename)
-                        # Split the file into chunks
-                        chunks = [data[i:i + CHUNK_SIZE] for i in range(0, len(data), CHUNK_SIZE)]
-                        for chunk in chunks:
-                            msg = ByteMultiArray()
-                            msg.data = list(chunk)  # Convert byte data to list
-                            # Log the first 10 bytes of the message
-                            rospy.loginfo("Publishing first 10 bytes from chunk of %s: %s" % (filename, msg.data[:10]))
-                            pub.publish(msg)
-                            rate.sleep()  # Control the publishing rate
-                    else:
-                        # If file is not too large, publish it as a whole
-                        msg = ByteMultiArray()
-                        msg.data = list(data)  # Convert byte data to list
-                        # Log the first 10 bytes of the message
-                        rospy.loginfo("Publishing first 10 bytes from: %s: %s" % (filename, msg.data[:10]))
-                        pub.publish(msg)
-                        rate.sleep()  # Control the publishing rate
+    bytes_sent = 0
+    # Publish the file data, chunk by chunk if necessary
+    for i in range(0, total_bytes, CHUNK_SIZE):
+        chunk = data[i:i+CHUNK_SIZE]
+        # Convert chunk (bytes) to list of uint8 ints for ByteMultiArray
+        chunk_list = [ord(c) for c in chunk]   # `ord` gets the integer value of each byte (0–255)
+        msg = ByteMultiArray()
+        msg.data = chunk_list
+        pub.publish(msg)
+        bytes_sent += len(chunk_list)
+        chunk_idx = i // CHUNK_SIZE + 1
+        rospy.loginfo("Published chunk %d/%d (%d bytes)", chunk_idx, total_chunks, len(chunk_list))
+        rospy.sleep(0.01)  # small delay to avoid flooding the network/queue
 
-            except Exception as e:
-                rospy.logerr("Error reading or publishing file %s: %s" % (filename, str(e)))
-        else:
-            rospy.logwarn("Skipping non-wav file: %s" % filename)
+    # Publish an empty message as an end-of-file marker
+    end_msg = ByteMultiArray()
+    end_msg.data = []  # no data signifies termination
+    pub.publish(end_msg)
+    rospy.loginfo("Published end-of-file marker. Total bytes sent: %d", bytes_sent)
 
-    if not wav_files_found:
-        rospy.logwarn("No .wav files found in the folder: %s" % sound_folder)
+    # Give time for messages to propagate before shutting down
+    rospy.sleep(0.5)
+    rospy.loginfo("WAV file transmission complete.")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
-        publish_raw_sound_files()
+        main()
     except rospy.ROSInterruptException:
-        rospy.logerr("ROS Interrupt exception caught.")
-    except Exception as e:
-        rospy.logerr("An unexpected error occurred: %s" % str(e))
-
+        pass
