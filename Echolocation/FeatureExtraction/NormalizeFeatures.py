@@ -15,8 +15,6 @@ def normalize_features(chosen_dataset):
         if df[col].dtype.kind not in 'biufc':
             continue
         
-        print(col)
-        
         # Compute z-score normalization for the column
         mean = df[col].mean()
         std = df[col].std()
