@@ -148,13 +148,13 @@ def extract_features(dataset_root_directory, chosen_dataset):
     #            "263", "283", "396", "441", "465", "472", "477", "502", "522", "527", "538", "645", "668", "686", "697",
     #            "713", "876"}  # Add more as needed
 
-    skip_ids = {"188", "203" ,"1196", "1214", "1248"}
+    #skip_ids = {"188", "203" ,"1196", "1214", "1248"}
     
     for folder_name in os.listdir(dataset_root_directory):
         folder_id = folder_name.split("_")[1]
-        if folder_id in skip_ids:
-            print(f"Skipping folder: {folder_name}")
-            continue
+        #if folder_id in skip_ids:
+        #    print(f"Skipping folder: {folder_name}")
+        #    continue
 
         folder_path = os.path.join(dataset_root_directory, folder_name)
         if not os.path.isdir(folder_path):
