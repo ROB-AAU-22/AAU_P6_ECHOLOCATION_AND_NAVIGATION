@@ -63,8 +63,12 @@ def build_dataset_from_csv(csv_file, dataset_root):
     feature_cols = [col for col in df.columns if col != "filename"]
 
     # Set of sample numbers to skip
-    skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250", "263", "283", "396", "441", "465", "472" , "477", "502", "522", "527", "538", "645", "668", "686", "697", "713", "876"}  # Add more as needed
-    
+    # skip_ids = {"1", "10", "29", "50", "53", "69", "97", "114", "128", "129", "149", "157", "181", "199", "200", "234", "250",
+    #            "263", "283", "396", "441", "465", "472", "477", "502", "522", "527", "538", "645", "668", "686", "697",
+    #            "713", "876"}  # Add more as needed
+
+    skip_ids = {"188", "203" ,"1196", "1214", "1243"}
+
     for idx, row in df.iterrows():
         filename = row["filename"]
 
@@ -316,10 +320,30 @@ def plot_worker(queue, worker_id):
                 ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt_i)
                 ax.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o', label='Ignored GT', alpha=0.7, zorder=1)
                 ax.plot(gt_x, gt_y, label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=2)
-                ax.plot(pred_x, pred_y, label="Predicted LiDAR", linestyle='--', alpha=0.7, zorder=3)
+                #ax.plot(pred_x, pred_y, label="Predicted LiDAR", linestyle='--', alpha=0.7, zorder=3)
 
                 robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
                 ax.add_patch(robot_circle)
+
+                # draw a line from origin to first scan point
+
+                plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+
+                plt.plot([0, pred_x[0]], [0, pred_y[0]], color='red', linestyle='--', alpha=0.5, zorder=3)
+
+                # draw a line from origin to last scan point
+
+                plt.plot([0, gt_x[-1]], [0, gt_y[-1]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+
+                plt.plot([0, pred_x[-1]], [0, pred_y[-1]], color='red', linestyle='--', alpha=0.5, zorder=3)
+
+                # draw an arrow vector from origin to middle point(s)
+
+                plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1,
+                          zorder=4)
+
+                plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black',
+                          alpha=1, zorder=4)
 
                 classified_as_object = classifications_i > best_threshold
                 ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=50, zorder=5, label='Object')

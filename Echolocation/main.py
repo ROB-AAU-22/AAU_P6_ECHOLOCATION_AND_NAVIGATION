@@ -7,6 +7,7 @@ import sys
 from FeatureExtraction import FeatureExtractionScript
 from FeatureExtraction import NormalizeFeatures
 from MachineLearning import ModelTrain
+from Data import DownloadDataKaggle
 
 def main():
     #train_predict_input = input("Would you like to train or predict? (train/predict) ").strip().lower()
@@ -15,27 +16,27 @@ def main():
         dataset_root_path = os.path.join("./Echolocation/Data", "dataset")
         chosen_dataset = None
         # checking if the dataset directory exists (whether we have any data)
-        if not os.path.exists(dataset_root_path):
-            print(f"Dataset directory {dataset_root_path} does not exist.")
-            # if we dont have any data, pull it from somewhere (?)
-            return
+        download_new_dataset = input("Would you like to download a new dataset? (y/n) ").strip().lower()
+        if download_new_dataset == "y":
+            DownloadDataKaggle.DownloadDataset()
         else:
-            # choosing a dataset to train on 
-            print("Choose a dataset to train on:")
-            for i, dataset in enumerate(os.listdir(dataset_root_path)):
-                dataset_path = os.path.join(dataset_root_path, dataset)
-                if not os.path.exists(dataset_path) or len(os.listdir(dataset_path)) == 0:
-                    continue
-                else:
-                    print(f"{dataset} [{i}]")
-            choose_dataset_input = input("Enter the index of the dataset you want to train: ")
-            try:
-                chosen_dataset = os.listdir(dataset_root_path)[int(choose_dataset_input)]
-            except IndexError as e:
-                print(f"Invalid index: {e}. Please choose a valid dataset index.")
-                return
-            dataset_root_path = os.path.join(dataset_root_path, chosen_dataset)
-            print(f"Selected dataset: {dataset_root_path}")
+            print("Skipping dataset download.")
+        # choosing a dataset to train on
+        print("Choose a dataset to train on:")
+        for i, dataset in enumerate(os.listdir(dataset_root_path)):
+            dataset_path = os.path.join(dataset_root_path, dataset)
+            if not os.path.exists(dataset_path) or len(os.listdir(dataset_path)) == 0:
+                continue
+            else:
+                print(f"{dataset} [{i}]")
+        choose_dataset_input = input("Enter the index of the dataset you want to train: ")
+        try:
+            chosen_dataset = os.listdir(dataset_root_path)[int(choose_dataset_input)]
+        except IndexError as e:
+            print(f"Invalid index: {e}. Please choose a valid dataset index.")
+            return
+        dataset_root_path = os.path.join(dataset_root_path, chosen_dataset)
+        print(f"Selected dataset: {dataset_root_path}")
         
         # optional to extract features
         extract_features_input = input("Would you like to extract features? (y/n) ").strip().lower()
