@@ -5,39 +5,37 @@ from std_msgs.msg import ByteMultiArray
 import os
 from datetime import datetime
 
+# Buffer to store chunks
+buffer = bytearray()
+
 def callback(msg):
+    global buffer
+    # Append the received chunk to the buffer
+    buffer.extend(msg.data)
+
     # Log the number of bytes received
-    rospy.loginfo("Received %d bytes of data" % len(msg.data))  # Corrected for Python 2.7
+    rospy.loginfo("Received %d bytes of data" % len(msg.data))
 
-    # Expand the ~ to the full path for the home directory
-    output_folder = os.path.expanduser("~/Desktop")  # Changed output folder to Desktop
-
-    # Create the output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    # Check if we've received all the chunks (if you know the total file size, you could use it)
+    # For now, we'll just save it periodically or once the message is received
+    # For large files, you might need a different method to determine when to save the complete file
 
     # Use timestamp to generate unique filenames
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    output_folder = os.path.expanduser("~/Desktop")
     output_path = os.path.join(output_folder, "received_%s.wav" % timestamp)
 
-    # Save the received data to the file
-    with open(output_path, 'wb') as f:
-        f.write(bytearray(msg.data))
-
-    # Log that the file has been saved
-    rospy.loginfo("Received and saved WAV file to: %s" % output_path)  # Corrected for Python 2.7
+    # Check if the full file is received (for example, you could check buffer size against a known file size)
+    if len(buffer) > 0:
+        with open(output_path, 'wb') as f:
+            f.write(buffer)  # Write all buffered data to the file
+        rospy.loginfo("Received and saved WAV file to: %s" % output_path)
+        buffer = bytearray()  # Clear buffer for next file
 
 def listener():
-    # Initialize the ROS node
     rospy.init_node('sound_file_subscriber')
-
-    # Subscribe to the topic where the data is being published
     rospy.Subscriber('/sound_file_raw', ByteMultiArray, callback)
-
-    # Log that the subscriber node is running
     rospy.loginfo("Subscriber node started. Waiting for sound data...")
-
-    # Keep the node running to process messages
     rospy.spin()
 
 if __name__ == '__main__':
