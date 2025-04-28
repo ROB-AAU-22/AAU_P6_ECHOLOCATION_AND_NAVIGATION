@@ -292,7 +292,7 @@ def save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, d
     })
     importance_df.sort_values(by="PermutationImportance", ascending=False, inplace=True)
 
-    base_file_dir = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "feature_importance", chosen_dataset)
+    base_file_dir = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset)
     os.makedirs(base_file_dir, exist_ok=True)
 
     base_filename = f"feature_importance_{num_epochs}_{num_layers}"
