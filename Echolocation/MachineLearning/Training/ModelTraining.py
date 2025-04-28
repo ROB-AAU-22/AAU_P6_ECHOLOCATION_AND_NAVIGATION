@@ -3,9 +3,12 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
-from model import MaskedMSELoss, AudioLidarDataset, MLPRegressor
+from Echolocation.MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
+from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
 
+# ---------------------------
+# Training Function
+# ---------------------------
 def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn, device, num_epochs, patience=PATIENCE, scheduler=None):
     best_val_loss = float("inf")
     best_model_state = None
@@ -44,10 +47,12 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
 
         print(f"Epoch {epoch}/{num_epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
 
+        # Learning rate scheduling
         if scheduler is not None:
             scheduler.step(avg_val_loss)
             print(f"  Learning rate: {scheduler.get_last_lr()[0]:.6f}")
 
+        # Checkpointing
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_model_state = model.state_dict()

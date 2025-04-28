@@ -476,7 +476,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     regression_loss_fn = MaskedMSELoss()
     classification_loss_fn = nn.BCELoss()
 
-    # Grid search over hyperparameters - now including batch_size and num_layers
+    # Grid search over hyperparameters
     for lr in learning_rates:
         for hidden_size in hidden_sizes:
             for batch_size in batch_sizes:
@@ -546,7 +546,6 @@ def model_training(dataset_root_directory, chosen_dataset):
                             # Create test loader with best batch size for final evaluation
                             test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    # [Rest of the code remains the same, but update the best_model initialization]
     if best_hyperparams is None:
         print("Error: No valid hyperparameters found during grid search.")
         return
@@ -656,11 +655,6 @@ def model_training(dataset_root_directory, chosen_dataset):
     scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"scan_index_plots_{num_epochs}_{num_layers}")
     os.makedirs(cartesian_folder, exist_ok=True)
     os.makedirs(scan_index_folder, exist_ok=True)
-    # Create a queue for plot tasks
-    #plot_queue = Queue()
-    # Adjust worker count based on actual CPU cores and I/O limitations
-    #num_workers = os.cpu_count()  # Limit to 4 workers for I/O-bound tasks
-    #print(f"Using {num_workers} worker threads for plotting")
 
 
     # Create and start workers

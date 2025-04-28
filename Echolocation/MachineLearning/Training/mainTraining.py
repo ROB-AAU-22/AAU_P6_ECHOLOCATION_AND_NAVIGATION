@@ -7,12 +7,15 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-from TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, NUM_LAYERS_LIST, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD
-from data_preparation import build_dataset_from_csv
-from model import MaskedMSELoss, AudioLidarDataset, MLPRegressor
-from training import train_model, compute_error_metrics
-from plotting import start_multiprocessing_plotting
+from Echolocation.MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, NUM_LAYERS_LIST, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD
+from Echolocation.MachineLearning.Training.DataHandler import build_dataset_from_csv
+from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
+from Echolocation.MachineLearning.Training.ModelTraining import train_model, compute_error_metrics
+from Echolocation.MachineLearning.Training.Plotting import start_multiprocessing_plotting
+
 def model_training(dataset_root_directory, chosen_dataset):
+    # Placeholder function for training the model.
+    # This should be replaced with the actual training logic.
     csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, "features_all_normalized.csv")
 
     X, Y, sample_ids, feature_names_full, original_distances = build_dataset_from_csv(csv_file, dataset_root_directory)
@@ -30,6 +33,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     print("X stats: min", np.min(X), "max", np.max(X))
     print("Y stats: min", np.min(Y), "max", np.max(Y))
 
+    # Split dataset into train (70%), validation (15%), and test (15%)
     X_train_val, X_test, Y_train_val, Y_test, original_distances_train_val, original_distances_test = train_test_split(X, Y, original_distances, test_size=0.15, random_state=42)
     X_train, X_val, Y_train, Y_val, original_distances_train, original_distances_val = train_test_split(X_train_val, Y_train_val, original_distances_train_val, test_size=0.1765, random_state=42)
     print("Training samples: ", X_train.shape[0], "Validation samples: ", X_val.shape[0], "Test samples: ", X_test.shape[0])
@@ -41,6 +45,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     input_dim = X.shape[1]
     output_dim = Y.shape[1]
 
+    # Use GPU if available.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -49,24 +54,28 @@ def model_training(dataset_root_directory, chosen_dataset):
     best_model_state = None
     best_threshold = None
 
+    # Define the global custom loss function
     regression_loss_fn = MaskedMSELoss()
     classification_loss_fn = nn.BCELoss()
 
+    # Grid search over hyperparameters
     for lr in LEARNING_RATES:
         for hidden_size in HIDDEN_SIZES:
             for batch_size in BATCH_SIZES:
                 for num_layers in NUM_LAYERS_LIST:
                     for threshold in CLASSIFICATION_THRESHOLDS:
                         print(f"\nTraining with: lr={lr}, hidden_size={hidden_size}, batch_size={batch_size}, layers={num_layers}, threshold={threshold}")
-
+                        # Create dataloaders with current batch size
                         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
                         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
                         model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
                         optimizer = optim.Adam(model.parameters(), lr=lr)
 
+                        # Add scheduler for learning rate
                         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.1, verbose=True)
 
+                        # Call with early stopping and learning rate scheduler
                         val_loss, model_state = train_model(
                             model,
                             train_loader,
@@ -79,6 +88,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                             scheduler=scheduler
                         )
 
+                        # Evaluate classification accuracy on the validation set
                         model.eval()
                         val_classification_accuracies = []
                         with torch.no_grad():
@@ -95,6 +105,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                         print(f"Hyperparams (lr={lr}, hidden={hidden_size}, batch={batch_size}, layers={num_layers}, thresh={threshold})")
                         print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {avg_val_classification_accuracy:.4f}")
 
+                        # Update best hyperparameters if the current configuration is better
                         if avg_val_classification_accuracy > best_overall_val_loss:
                             print("New best hyperparameters found!")
                             best_overall_val_loss = avg_val_classification_accuracy
@@ -110,6 +121,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                             best_model_state = model_state
                             best_threshold = threshold
 
+                            # Create test loader with best batch size for final evaluation
                             test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     if best_hyperparams is None:
@@ -120,10 +132,11 @@ def model_training(dataset_root_directory, chosen_dataset):
     print(best_hyperparams)
     print(f"Best classification threshold: {best_threshold}")
     print(f"Best validation classification accuracy: {best_overall_val_loss:.4f}")
-
+    # Build the best model with all best hyperparameters
     best_model = MLPRegressor(input_dim, best_hyperparams["hidden_size"], output_dim, num_layers=best_hyperparams["num_layers"]).to(device)
     best_model.load_state_dict(best_model_state)
 
+    # Evaluate on the test set.
     best_model.eval()
     test_losses = []
     all_preds = []
@@ -145,6 +158,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     avg_test_loss = np.mean(test_losses)
     print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
 
+    # Concatenate predictions for plotting.
     Y_pred = np.concatenate(all_preds, axis=0)
     Y_true = np.concatenate(all_targets, axis=0)
     classifications = np.concatenate(all_classifications, axis=0)
@@ -152,9 +166,15 @@ def model_training(dataset_root_directory, chosen_dataset):
     mae_array = []
     rmse_array = []
     mre_array = []
+    # {"0_1": {"mae": [], "rmse": [], "mre": [], "corr": []}, "1_2": {"mae": [], "rmse": [], "mre": [], "corr": []}}
+    # setup a collection like this for ranges 0-1, 1-2, 2-3, 3-4, and 4-5
+    # for each range, calculate the metrics and append to the collection
+    # then save each range to different csv files
     range_metrics = []
 
+
     for i in range(len(Y_true)):
+        # add all non nan numbers to array
         mae_array.append(np.nanmean(np.abs(Y_true[i] - Y_pred[i])))
         rmse_array.append(np.sqrt(np.nanmean((Y_true[i] - Y_pred[i]) ** 2)))
         mre_array.append(np.nanmean(np.abs((Y_true[i] - Y_pred[i]) / (Y_true[i] + 1e-10))) if np.any(Y_true[i]) else 0)
@@ -189,6 +209,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         'mre': mean_relative_error
     }
 
+    # Save the best model.
     models_folder = os.path.join("./Echolocation", "Models")
     os.makedirs(models_folder, exist_ok=True)
     model_file = os.path.join(models_folder, f"{chosen_dataset}_{NUM_EPOCHS}_{best_hyperparams['num_layers']}_model.pth")
@@ -199,11 +220,13 @@ def model_training(dataset_root_directory, chosen_dataset):
     }, model_file)
 
     print("Saving comparison plots...")
+    # Create folders
     cartesian_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"cartesian_plots_{NUM_EPOCHS}_{best_hyperparams['num_layers']}")
     scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"scan_index_plots_{NUM_EPOCHS}_{best_hyperparams['num_layers']}")
     os.makedirs(cartesian_folder, exist_ok=True)
     os.makedirs(scan_index_folder, exist_ok=True)
 
+    # Create and start workers
     start_multiprocessing_plotting(
         Y_true, Y_pred, classifications, original_distances_test,
         NUM_EPOCHS, best_hyperparams['num_layers'], cartesian_folder, scan_index_folder,
@@ -212,6 +235,7 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     print(f"Best model saved to {model_file}")
 
+    # Evaluate classification accuracy
     classification_accuracy = (classifications.round() == (Y_true <= DISTANCE_THRESHOLD)).mean()
     print(f"Classification Accuracy: {classification_accuracy:.4f}")
     print("\nBest hyperparameters found:")
@@ -221,6 +245,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
     print(f"Best model saved to {model_file}")
 
+    # Saving error metrics to seperate CSV for each range
     header = ['chirp', 'range', 'best_validation_loss', 'mean_absolute_error', 'root_mean_square_error', 'mean_relative_error']
     error_metrics_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "error_metrics.csv")
     for range_bin in range_metrics_average:

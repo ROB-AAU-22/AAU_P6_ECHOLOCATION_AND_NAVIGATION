@@ -9,6 +9,7 @@ class MaskedMSELoss(nn.Module):
         self.mse_loss = nn.MSELoss(reduction='none')
 
     def forward(self, outputs, targets):
+        # Mask values where targets are NaN or greater than distance_threshold
         mask = ~torch.isnan(targets)
         outputs = outputs[mask]
         targets = targets[mask]
@@ -17,6 +18,9 @@ class MaskedMSELoss(nn.Module):
 
 class AudioLidarDataset(Dataset):
     def __init__(self, X, Y):
+        """
+            Expects X and Y as NumPy arrays.
+        """
         self.X = torch.tensor(X, dtype=torch.float32)
         self.Y = torch.tensor(Y, dtype=torch.float32)
 
@@ -26,8 +30,20 @@ class AudioLidarDataset(Dataset):
     def __getitem__(self, index):
         return self.X[index], self.Y[index]
 
+# ---------------------------
+# PyTorch Model Definition
+# ---------------------------
 class MLPRegressor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
+        """
+            A simple feedforward neural network for regression and classification.
+
+            Parameters:
+              - input_dim: number of input features.
+              - hidden_dim: size of the hidden layer.
+              - output_dim: dimensionality of the target (LiDAR scan length).
+              - num_layers: number of hidden layers (default=2).
+        """
         super(MLPRegressor, self).__init__()
         layers = []
         layers.append(nn.Linear(input_dim, hidden_dim))

@@ -5,9 +5,22 @@ import ast
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from TrainingConfig import DISTANCE_THRESHOLD
+from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD
 
 def build_dataset_from_csv(csv_file, dataset_root):
+    """
+        Build a dataset for ML using normalized audio features from a CSV file and LiDAR scans from dataset_2 structure.
+
+        Parameters:
+          - csv_file: Path to features_all_normalized.csv.
+          - dataset_root: Root folder containing dataset_2.
+
+        Returns:
+          - X: NumPy array of shape (n_samples, n_audio_features)
+          - Y: NumPy array of shape (n_samples, n_lidar_points)
+          - sample_ids: List of sample indices (timestamps)
+          - original_distances: List of original LiDAR distances for plotting
+        """
     df = pd.read_csv(csv_file)
     df.sort_values("filename", inplace=True)
     print("DataFrame preview:")
