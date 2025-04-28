@@ -6,7 +6,7 @@ import sys
 # Import local scripts
 from FeatureExtraction import FeatureExtractionScript
 from FeatureExtraction import NormalizeFeatures
-from MachineLearning.Training import mainTraining
+from MachineLearning.Training import MainTraining
 from Data import DownloadDataKaggle
 
 def main():
@@ -60,7 +60,7 @@ def main():
 
         # otherwise train model
         print("Training model...")
-        mainTraining.model_training(dataset_root_path, chosen_dataset)
+        MainTraining.model_training(dataset_root_path, chosen_dataset)
         print("Model training complete.")
         
     #elif train_predict_input == "predict":

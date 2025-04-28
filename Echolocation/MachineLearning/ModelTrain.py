@@ -19,6 +19,12 @@ from sklearn.model_selection import train_test_split
 
 DISTANCE_THRESHOLD = 2
 
+import matplotlib
+matplotlib.use('Agg')  # Use non-GUI backend for multiprocessing
+from multiprocessing import Process, Queue, cpu_count
+
+from captum.attr import IntegratedGradients
+
 
 # ---------------------------
 # Data Preparation Functions
@@ -239,6 +245,14 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
 
     return best_val_loss, best_model_state
 
+class WrappedModel(torch.nn.Module):
+    def __init__(self, base_model):
+        super().__init__()
+        self.base_model = base_model
+
+    def forward(self, x):
+        preds, _ = self.base_model(x)  # Only return predictions
+        return preds
 
 def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
     model.eval()
@@ -254,20 +268,31 @@ def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
         importance = permuted_loss - base_loss
         importances.append(importance)
 
-    return importances
+    wrapped_model = WrappedModel(model)
+    ig = IntegratedGradients(wrapped_model)
+    attributions = ig.attribute(
+        torch.tensor(X_val, dtype=torch.float32).to(device),
+        target=0
+    )
+
+    return importances, attributions
 
 def save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, device, feature_names_full, num_epochs, num_layers):
     # compute feature importance
-    importances = compute_permutation_importance(best_model, X_val, Y_val, loss_fn, device)
+    importances, attributions = compute_permutation_importance(best_model, X_val, Y_val, loss_fn, device)
+
+    ig_mean = attributions.detach().cpu().numpy()
+    ig_mean = np.mean(np.abs(ig_mean), axis=0)
 
     # save feature importance to csv
     importance_df = pd.DataFrame({
         "Feature": feature_names_full,
-        "Importance": importances
+        "PermutationImportance": importances,
+        "IntegratedGradientsImportance": ig_mean
     })
-    importance_df.sort_values(by="Importance", ascending=False, inplace=True)
+    importance_df.sort_values(by="PermutationImportance", ascending=False, inplace=True)
 
-    base_file_dir = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "feature_importance", chosen_dataset)
+    base_file_dir = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset)
     os.makedirs(base_file_dir, exist_ok=True)
 
     base_filename = f"feature_importance_{num_epochs}_{num_layers}"
@@ -423,9 +448,6 @@ def compute_error_metrics(Y_true, Y_pred):
     return error_metrics_results
 
 def model_training(dataset_root_directory, chosen_dataset):
-    # Placeholder function for training the model.
-    # This should be replaced with the actual training logic.
-    
     csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, "features_all_normalized.csv")
     
     X, Y, sample_ids, feature_names_full, original_distances = build_dataset_from_csv(csv_file, dataset_root_directory)    
@@ -636,8 +658,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         'mre': mean_relative_error
     }
     
-    # currently broken - will fix later
-    #save_feature_importance(chosen_dataset, best_model, X_val, Y_val, loss_fn, device, feature_names_full, num_epochs, num_layers)
+    save_feature_importance(chosen_dataset, best_model, X_val, Y_val, regression_loss_fn, device, feature_names_full, num_epochs, num_layers)
 
     # Save the best model.
     models_folder = os.path.join("./Echolocation", "Models")
@@ -676,12 +697,11 @@ def model_training(dataset_root_directory, chosen_dataset):
     print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
     print(f"Best model saved to {model_file}")
     
-    # Saving error metrics to seperate CSV for each range
+    # Saving error metrics to one CSV with a column for each range bin
     header = ['chirp', 'range', 'best_validation_loss', 'mean_absolute_error', 'root_mean_square_error', 'mean_relative_error']
     error_metrics_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "error_metrics.csv")
     for range_bin in range_metrics_average:
         row = [chosen_dataset, range_bin, best_overall_val_loss, range_metrics_average[range_bin]['mae'], range_metrics_average[range_bin]['rmse'], range_metrics_average[range_bin]['mre']]
-        
         try:
             with open(error_metrics_file, 'x', newline='') as f:
                 writer = csv.writer(f)

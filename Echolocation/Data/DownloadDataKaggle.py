@@ -13,7 +13,7 @@ def DownloadDataset():
     datasets = kg.api.dataset_list(user="villiamb")
     print("Available Datasets:")
     for i, dataset in enumerate(datasets, start=1):
-        print(f"[{i}] : {(dataset.ref).split("/")[1]}")
+        print(f"[{i}] : {(dataset.ref).split('/')[1]}")
 
     try:
         choice = int(input("Enter the number corresponding to the dataset to download and unzip: ")) - 1

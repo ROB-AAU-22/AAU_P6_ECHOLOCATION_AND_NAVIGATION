@@ -7,11 +7,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-from Echolocation.MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, NUM_LAYERS_LIST, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD
-from Echolocation.MachineLearning.Training.DataHandler import build_dataset_from_csv
-from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
-from Echolocation.MachineLearning.Training.ModelTraining import train_model, compute_error_metrics
-from Echolocation.MachineLearning.Training.Plotting import start_multiprocessing_plotting
+from MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, NUM_LAYERS_LIST, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD
+from MachineLearning.Training.DataHandler import build_dataset_from_csv
+from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
+from MachineLearning.Training.ModelTraining import train_model, compute_error_metrics
+from MachineLearning.Training.Plotting import start_multiprocessing_plotting
+from MachineLearning.Training.FeatureImportance import save_feature_importance
 
 def model_training(dataset_root_directory, chosen_dataset):
     # Placeholder function for training the model.
@@ -238,6 +239,8 @@ def model_training(dataset_root_directory, chosen_dataset):
         'rmse': root_mean_square_error,
         'mre': mean_relative_error
     }
+    
+    save_feature_importance(chosen_dataset, best_model, X_val, Y_val, regression_loss_fn, device, feature_names_full, NUM_EPOCHS, best_hyperparams["num_layers"])
 
     # Save the best model.
     models_folder = os.path.join("./Echolocation", "Models")

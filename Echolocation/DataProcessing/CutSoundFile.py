@@ -28,12 +28,11 @@ def find_peaks(sound_file, threshold=0.05, min_distance=0.002, sample_rate=44100
     
     return left_peaks_indexes, right_peaks_indexes
         
-def cut_sound_file(sound_file_path, before_threshold=0.005, after_threshold=0.3):
+def cut_sound_file(sound_file, sr, before_threshold=0.005, after_threshold=0.3):
     """
     Cuts the sound file based on the first peak found in either channel.
     Cuts it by before_threshold seconds before the first peak and after_threshold seconds after the first peak.
     """
-    sound_file, sr = sf.read(sound_file_path)
     normalized_sound_file = normalize_intensity(sound_file)
     
     left_peaks_indexes, right_peaks_indexes = find_peaks(normalized_sound_file, threshold=0.4, min_distance=0.002, sample_rate=sr)
