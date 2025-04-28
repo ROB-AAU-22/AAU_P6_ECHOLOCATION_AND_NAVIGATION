@@ -5,7 +5,7 @@ import ast
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD
+from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD
 
 
 def build_dataset_from_csv(csv_file, dataset_root):

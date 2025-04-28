@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from Echolocation.MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
-from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
+from MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
+from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
 
 # ---------------------------
 # Training Function
@@ -65,22 +65,6 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
                 break
 
     return best_val_loss, best_model_state
-
-def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
-    model.eval()
-    base_preds, _ = model(torch.tensor(X_val, dtype=torch.float32).to(device))
-    base_loss = loss_fn(base_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
-
-    importances = []
-    for i in range(X_val.shape[1]):
-        X_permuted = X_val.copy()
-        np.random.shuffle(X_permuted[:, i])
-        permuted_preds, _ = model(torch.tensor(X_permuted, dtype=torch.float32).to(device))
-        permuted_loss = loss_fn(permuted_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
-        importance = permuted_loss - base_loss
-        importances.append(importance)
-
-    return importances
 
 def compute_error_metrics(Y_true, Y_pred):
     range_bins = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]

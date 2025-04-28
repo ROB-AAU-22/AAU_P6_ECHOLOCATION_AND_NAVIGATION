@@ -658,7 +658,6 @@ def model_training(dataset_root_directory, chosen_dataset):
         'mre': mean_relative_error
     }
     
-    # currently broken - will fix later
     save_feature_importance(chosen_dataset, best_model, X_val, Y_val, regression_loss_fn, device, feature_names_full, num_epochs, num_layers)
 
     # Save the best model.
