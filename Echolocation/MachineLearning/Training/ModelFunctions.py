@@ -16,18 +16,23 @@ class MaskedMSELoss(nn.Module):
         loss = self.mse_loss(outputs, targets)
         return loss.mean()
 
+
 class AudioLidarDataset(Dataset):
     def __init__(self, X, Y):
         """
+            Initializes the dataset with input features (X) and targets (Y).
             Expects X and Y as NumPy arrays.
         """
+        # Convert X and Y to PyTorch tensors with type float32
         self.X = torch.tensor(X, dtype=torch.float32)
         self.Y = torch.tensor(Y, dtype=torch.float32)
 
     def __len__(self):
+        # Returns the total number of samples in the dataset
         return self.X.shape[0]
 
     def __getitem__(self, index):
+        # Retrieves the input (X) and target (Y) at the specified index
         return self.X[index], self.Y[index]
 
 # ---------------------------
@@ -46,16 +51,24 @@ class MLPRegressor(nn.Module):
         """
         super(MLPRegressor, self).__init__()
         layers = []
+        # Add the first hidden layer
         layers.append(nn.Linear(input_dim, hidden_dim))
         layers.append(nn.ReLU())
+        # Add additional hidden layers based on num_layers
         for i in range(num_layers - 1):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.ReLU())
+        # Define the regression head
         self.regression_head = nn.Sequential(*layers, nn.Linear(hidden_dim, output_dim))
+        # Define the classification head with sigmoid activation for probabilities
         self.classification_head = nn.Sequential(nn.Linear(hidden_dim, output_dim), nn.Sigmoid())
 
     def forward(self, x):
+        # Pass input through the shared regression layers excluding the last layer
         shared = self.regression_head[:-1](x)
+        # Compute regression output using the final layer of regression head
         regression_output = self.regression_head[-1](shared)
+        # Compute classification output
         classification_output = self.classification_head(shared)
+        # Return both regression and classification outputs
         return regression_output, classification_output

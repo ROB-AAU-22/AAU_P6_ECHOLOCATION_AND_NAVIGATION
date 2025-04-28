@@ -24,11 +24,11 @@ def model_training(dataset_root_directory, chosen_dataset):
         return
     print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features, LiDAR scan length: {Y.shape[1]}")
 
-    print("Checking for NaNs or Infs...")
-    print("X contains NaNs:", np.isnan(X).any())
-    print("X contains Infs:", np.isinf(X).any())
-    print("Y contains NaNs:", np.isnan(Y).any())
-    print("Y contains Infs:", np.isinf(Y).any())
+    #print("Checking for NaNs or Infs...")
+    #print("X contains NaNs:", np.isnan(X).any())
+    #print("X contains Infs:", np.isinf(X).any())
+    #print("Y contains NaNs:", np.isnan(Y).any())
+    #print("Y contains Infs:", np.isinf(Y).any())
 
     print("X stats: min", np.min(X), "max", np.max(X))
     print("Y stats: min", np.min(Y), "max", np.max(Y))
@@ -73,7 +73,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                         optimizer = optim.Adam(model.parameters(), lr=lr)
 
                         # Add scheduler for learning rate
-                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.1, verbose=True)
+                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True)
 
                         # Call with early stopping and learning rate scheduler
                         val_loss, model_state = train_model(
@@ -89,17 +89,30 @@ def model_training(dataset_root_directory, chosen_dataset):
                         )
 
                         # Evaluate classification accuracy on the validation set
-                        model.eval()
-                        val_classification_accuracies = []
-                        with torch.no_grad():
-                            for X_batch, Y_batch in val_loader:
-                                X_batch = X_batch.to(device)
-                                Y_batch = Y_batch.to(device)
+                        model.eval()  # Set the model to evaluation mode
+                        val_classification_accuracies = []  # List to store classification accuracies for each batch
+
+                        with torch.no_grad():  # Disable gradient computation for validation
+                            for X_batch, Y_batch in val_loader:  # Iterate through validation data batches
+                                X_batch = X_batch.to(device)  # Move input batch to the selected device (CPU or GPU)
+                                Y_batch = Y_batch.to(device)  # Move target batch to the selected device
+
+                                # Perform forward pass to get regression and classification outputs
                                 regression_outputs, classification_outputs = model(X_batch)
+
+                                # Define classification targets based on the distance threshold
                                 classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
+
+                                # Generate classification predictions based on the threshold
                                 classification_preds = (classification_outputs > threshold).float()
+                                
+                                # Calculate batch accuracy
                                 accuracy = (classification_preds == classification_targets).float().mean().item()
+                                
+                                # Append batch accuracy to the list
                                 val_classification_accuracies.append(accuracy)
+                        
+                        # Compute average classification accuracy over all batches
                         avg_val_classification_accuracy = np.mean(val_classification_accuracies)
 
                         print(f"Hyperparams (lr={lr}, hidden={hidden_size}, batch={batch_size}, layers={num_layers}, thresh={threshold})")
@@ -138,23 +151,40 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     # Evaluate on the test set.
     best_model.eval()
-    test_losses = []
-    all_preds = []
-    all_targets = []
-    all_classifications = []
-    with torch.no_grad():
-        for X_batch, Y_batch in test_loader:
-            X_batch = X_batch.to(device)
-            Y_batch = Y_batch.to(device)
+    test_losses = []  # List to store the overall losses for the test set
+    all_preds = []  # List to store all regression predictions
+    all_targets = []  # List to store all ground truth values
+    all_classifications = []  # List to store all classification predictions
+
+    with torch.no_grad():  # Disable gradient computation for evaluation
+        for X_batch, Y_batch in test_loader:  # Iterate through test data batches
+            X_batch = X_batch.to(device)  # Move input batch to selected device
+            Y_batch = Y_batch.to(device)  # Move ground truth batch to selected device
+
+            # Forward pass: get both regression and classification outputs from the model
             regression_outputs, classification_outputs = best_model(X_batch)
+
+            # Compute regression loss
             regression_loss = regression_loss_fn(regression_outputs, Y_batch)
+
+            # Define classification targets based on the threshold
             classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
+
+            # Compute classification loss
             classification_loss = classification_loss_fn(classification_outputs, classification_targets)
+
+            # Compute combined loss (regression + classification)
             loss = regression_loss + classification_loss
+
+            # Store the overall loss for this batch
             test_losses.append(loss.item())
+
+            # Save predictions and targets for later analysis
             all_preds.append(regression_outputs.cpu().numpy())
             all_targets.append(Y_batch.cpu().numpy())
             all_classifications.append(classification_outputs.cpu().numpy())
+
+    # Compute average loss across the test set
     avg_test_loss = np.mean(test_losses)
     print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
 

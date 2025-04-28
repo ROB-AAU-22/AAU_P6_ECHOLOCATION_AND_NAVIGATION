@@ -6,7 +6,6 @@ import sys
 # Import local scripts
 from FeatureExtraction import FeatureExtractionScript
 from FeatureExtraction import NormalizeFeatures
-#from MachineLearning import ModelTrain
 from MachineLearning.Training import mainTraining
 from Data import DownloadDataKaggle
 
