@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+
+# Hyperparameters and configuration settings
+DISTANCE_THRESHOLD = 2
+LEARNING_RATES = [0.01]
+HIDDEN_SIZES = [128, 256, 512]
+BATCH_SIZES = [32, 64, 128, 256]
+NUM_EPOCHS = 200
+NUM_LAYERS_LIST = [2]
+CLASSIFICATION_THRESHOLDS = [0.5]
+PATIENCE = 10

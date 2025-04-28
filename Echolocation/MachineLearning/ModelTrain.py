@@ -19,10 +19,6 @@ from sklearn.model_selection import train_test_split
 
 DISTANCE_THRESHOLD = 2
 
-import matplotlib
-matplotlib.use('Agg')  # Use non-GUI backend for multiprocessing
-from multiprocessing import Process, Queue, cpu_count
-
 
 # ---------------------------
 # Data Preparation Functions
@@ -465,11 +461,11 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     # Hyperparameters
     learning_rates = [0.01]
-    hidden_sizes = [128, 256]
-    batch_sizes = [16, 32, 64, 128]
+    hidden_sizes = [128, 256, 512, 1024]
+    batch_sizes = [32, 64, 128, 256]
     num_epochs = 200
-    num_layers_list = [2]
-    classification_thresholds = [0.5,0.6]
+    num_layers_list = [2,3]
+    classification_thresholds = [0.5]
 
     best_overall_val_loss = 0
     best_hyperparams = None
@@ -480,7 +476,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     regression_loss_fn = MaskedMSELoss()
     classification_loss_fn = nn.BCELoss()
 
-    # Grid search over hyperparameters - now including batch_size and num_layers
+    # Grid search over hyperparameters
     for lr in learning_rates:
         for hidden_size in hidden_sizes:
             for batch_size in batch_sizes:
@@ -497,7 +493,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                         optimizer = optim.Adam(model.parameters(), lr=lr)
 
                         # Add scheduler for learning rate
-                        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.1, verbose=True)
+                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True)
 
                         # Call with early stopping and learning rate scheduler
                         val_loss, model_state = train_model(
@@ -510,7 +506,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                             device,
                             num_epochs,
                             patience=10,
-                            #scheduler=scheduler
+                            scheduler=scheduler
                         )
 
                         # Evaluate classification accuracy on the validation set
@@ -550,7 +546,6 @@ def model_training(dataset_root_directory, chosen_dataset):
                             # Create test loader with best batch size for final evaluation
                             test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    # [Rest of the code remains the same, but update the best_model initialization]
     if best_hyperparams is None:
         print("Error: No valid hyperparameters found during grid search.")
         return
@@ -660,11 +655,6 @@ def model_training(dataset_root_directory, chosen_dataset):
     scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, f"scan_index_plots_{num_epochs}_{num_layers}")
     os.makedirs(cartesian_folder, exist_ok=True)
     os.makedirs(scan_index_folder, exist_ok=True)
-    # Create a queue for plot tasks
-    #plot_queue = Queue()
-    # Adjust worker count based on actual CPU cores and I/O limitations
-    #num_workers = os.cpu_count()  # Limit to 4 workers for I/O-bound tasks
-    #print(f"Using {num_workers} worker threads for plotting")
 
 
     # Create and start workers
