@@ -8,6 +8,8 @@ import soundfile as sf
 import pandas as pd
 from scipy.signal import correlate, coherence
 
+from DataProcessing.CutSoundFile import cut_sound_file
+
 # --------------------------------------------------
 # Helper Functions
 # --------------------------------------------------
@@ -30,13 +32,13 @@ def compute_time_features(signal, sr, frame_length=2048, hop_length=512):
 def compute_frequency_features(signal, sr, n_fft=2048, hop_length=512, n_mfcc=13):
     stft = librosa.stft(signal, n_fft=n_fft, hop_length=hop_length)
     magnitude = np.abs(stft)
-    #centroid = librosa.feature.spectral_centroid(S=magnitude, sr=sr)[0]
+    centroid = librosa.feature.spectral_centroid(S=magnitude, sr=sr)[0]
     bandwidth = librosa.feature.spectral_bandwidth(S=magnitude, sr=sr)[0]
     rolloff = librosa.feature.spectral_rolloff(S=magnitude, sr=sr)[0]
     #mfccs = librosa.feature.mfcc(y=signal, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
     features = {
-        #"spectral_centroid_mean": float(np.mean(centroid)),
-        #"spectral_centroid_std": float(np.std(centroid)),
+        "spectral_centroid_mean": float(np.mean(centroid)),
+        "spectral_centroid_std": float(np.std(centroid)),
         "spectral_bandwidth_mean": float(np.mean(bandwidth)),
         "spectral_bandwidth_std": float(np.std(bandwidth)),
         "spectral_rolloff_mean": float(np.mean(rolloff)),
@@ -181,6 +183,8 @@ def extract_features(dataset_root_directory, chosen_dataset):
 
                 if stereo_signal.ndim != 2 and stereo_signal.shape[1] < 2:
                     raise ValueError("Input audio file is not stereo.")
+                
+                #stereo_signal = cut_sound_file(stereo_signal, sr, before_threshold=0.005, after_threshold=0.3)
 
                 left_ch, right_ch = stereo_signal[:, 0], stereo_signal[:, 1]
 
@@ -191,10 +195,11 @@ def extract_features(dataset_root_directory, chosen_dataset):
                     **{f"right_{k}": v for k, v in compute_frequency_features(right_ch, sr).items()},
                     **compute_spatial_features(left_ch, right_ch, sr)
                 })
-
+                
                 stereo_signal_duration = len(stereo_signal) / sr
                 if stereo_signal_duration < 2.0:
-                    folder_features.update(compute_room_acoustics_features(left_ch, sr))
+                    folder_features.update({f"left_{k}": v for k, v in compute_room_acoustics_features(left_ch, sr).items()})
+                    folder_features.update({f"right_{k}": v for k, v in compute_room_acoustics_features(right_ch, sr).items()})
 
                 records.append(folder_features)
 
