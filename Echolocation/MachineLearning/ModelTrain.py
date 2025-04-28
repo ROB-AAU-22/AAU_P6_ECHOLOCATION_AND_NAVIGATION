@@ -19,10 +19,6 @@ from sklearn.model_selection import train_test_split
 
 DISTANCE_THRESHOLD = 2
 
-import matplotlib
-matplotlib.use('Agg')  # Use non-GUI backend for multiprocessing
-from multiprocessing import Process, Queue, cpu_count
-
 
 # ---------------------------
 # Data Preparation Functions
@@ -465,11 +461,11 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     # Hyperparameters
     learning_rates = [0.01]
-    hidden_sizes = [128, 256]
-    batch_sizes = [16, 32, 64, 128]
+    hidden_sizes = [128, 256, 512, 1024]
+    batch_sizes = [32, 64, 128, 256]
     num_epochs = 200
-    num_layers_list = [2]
-    classification_thresholds = [0.5,0.6]
+    num_layers_list = [2,3]
+    classification_thresholds = [0.5]
 
     best_overall_val_loss = 0
     best_hyperparams = None
@@ -497,7 +493,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                         optimizer = optim.Adam(model.parameters(), lr=lr)
 
                         # Add scheduler for learning rate
-                        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.1, verbose=True)
+                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True)
 
                         # Call with early stopping and learning rate scheduler
                         val_loss, model_state = train_model(
@@ -510,7 +506,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                             device,
                             num_epochs,
                             patience=10,
-                            #scheduler=scheduler
+                            scheduler=scheduler
                         )
 
                         # Evaluate classification accuracy on the validation set
