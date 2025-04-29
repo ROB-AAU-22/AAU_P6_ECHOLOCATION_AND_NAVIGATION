@@ -8,7 +8,7 @@ import soundfile as sf
 import pandas as pd
 from scipy.signal import correlate, coherence
 
-from DataProcessing.CutSoundFile import cut_sound_file
+#from DataProcessing.CutSoundFile import cut_sound_file
 
 # --------------------------------------------------
 # Helper Functions
@@ -184,7 +184,7 @@ def extract_features(dataset_root_directory, chosen_dataset):
                 if stereo_signal.ndim != 2 and stereo_signal.shape[1] < 2:
                     raise ValueError("Input audio file is not stereo.")
                 
-                stereo_signal = cut_sound_file(stereo_signal, sr, before_threshold=0.005, after_threshold=0.3)
+                #stereo_signal = cut_sound_file(stereo_signal, sr, before_threshold=0.005, after_threshold=0.3)
 
                 left_ch, right_ch = stereo_signal[:, 0], stereo_signal[:, 1]
 
