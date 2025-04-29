@@ -9,52 +9,92 @@ from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, 
 # ---------------------------
 # Training Function
 # ---------------------------
-def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn, device, num_epochs, patience=PATIENCE, scheduler=None):
-    best_val_loss = float("inf")
+def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn,
+                device, num_epochs, patience=PATIENCE, scheduler=None,
+                reg_weight=1.0, class_weight=1.0):
+    from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
+
+    best_combined_score = float("inf")
     best_model_state = None
     patience_counter = 0
 
     for epoch in range(1, num_epochs + 1):
         model.train()
         train_losses = []
+
         for X_batch, Y_batch in train_loader:
             X_batch = X_batch.to(device)
             Y_batch = Y_batch.to(device)
             optimizer.zero_grad()
+
             regression_outputs, classification_outputs = model(X_batch)
+
             regression_loss = regression_loss_fn(regression_outputs, Y_batch)
             classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
             classification_loss = classification_loss_fn(classification_outputs, classification_targets)
-            loss = regression_loss + classification_loss
+
+            loss = reg_weight * regression_loss + class_weight * classification_loss
             loss.backward()
             optimizer.step()
             train_losses.append(loss.item())
+
         avg_train_loss = np.mean(train_losses)
 
+        # --------------------
+        # Validation Phase
+        # --------------------
         model.eval()
-        val_losses = []
+        val_regression_losses = []
+        val_classification_losses = []
+        all_targets = []
+        all_preds = []
+
         with torch.no_grad():
             for X_batch, Y_batch in val_loader:
                 X_batch = X_batch.to(device)
                 Y_batch = Y_batch.to(device)
+
                 regression_outputs, classification_outputs = model(X_batch)
+
                 regression_loss = regression_loss_fn(regression_outputs, Y_batch)
                 classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
                 classification_loss = classification_loss_fn(classification_outputs, classification_targets)
-                loss = regression_loss + classification_loss
-                val_losses.append(loss.item())
-        avg_val_loss = np.mean(val_losses)
 
-        print(f"Epoch {epoch}/{num_epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
+                val_regression_losses.append(regression_loss.item())
+                val_classification_losses.append(classification_loss.item())
 
-        # Learning rate scheduling
-        if scheduler is not None:
-            scheduler.step(avg_val_loss)
+                all_targets.extend(classification_targets.cpu().numpy().flatten())
+                all_preds.extend(classification_outputs.cpu().numpy().flatten())
+
+        avg_reg_loss = np.mean(val_regression_losses)
+        avg_class_loss = np.mean(val_classification_losses)
+
+        # Apply sigmoid threshold for binary classification
+        thresholded_preds = (np.array(all_preds) > 0.5).astype(int)
+        all_targets = np.array(all_targets).astype(int)
+
+        precision = precision_score(all_targets, thresholded_preds, zero_division=0)
+        recall = recall_score(all_targets, thresholded_preds, zero_division=0)
+        f1_classifier = f1_score(all_targets, thresholded_preds, zero_division=0)
+        try:
+            roc_auc = roc_auc_score(all_targets, all_preds)
+        except ValueError:
+            roc_auc = float('nan')
+
+        combined_loss = reg_weight * avg_reg_loss + class_weight * (1 - f1_classifier)  # minimizing
+
+        print(f"Epoch {epoch}/{num_epochs}")
+        print(f"  Train Loss: {avg_train_loss:.4f}")
+        print(f"  Val Regression Loss: {avg_reg_loss:.4f}, Val Classification Loss: {avg_class_loss:.4f}")
+        print(f"  Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}, ROC AUC: {roc_auc:.4f}")
+        print(f"  Combined loss: {combined_loss:.4f}")
+
+        if scheduler:
+            scheduler.step(combined_loss)
             print(f"  Learning rate: {scheduler.get_last_lr()[0]:.6f}")
 
-        # Checkpointing
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        if combined_loss < best_combined_score:
+            best_combined_score = combined_loss
             best_model_state = model.state_dict()
             patience_counter = 0
         else:
@@ -64,7 +104,8 @@ def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, 
                 print("  Early stopping triggered.")
                 break
 
-    return best_val_loss, best_model_state
+    return best_combined_score, best_model_state
+
 
 def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
     model.eval()

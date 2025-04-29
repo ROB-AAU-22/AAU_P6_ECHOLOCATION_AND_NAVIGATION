@@ -58,7 +58,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    best_overall_val_loss = 0
+    best_overall_val_loss = float("inf")
     best_hyperparams = None
     best_model_state = None
     best_threshold = None
@@ -72,82 +72,50 @@ def model_training(dataset_root_directory, chosen_dataset):
         for hidden_size in HIDDEN_SIZES:
             for batch_size in BATCH_SIZES:
                 for num_layers in NUM_LAYERS_LIST:
-                    for threshold in CLASSIFICATION_THRESHOLDS:
-                        print(
-                            f"\nTraining with: lr={lr}, hidden_size={hidden_size}, batch_size={batch_size}, layers={num_layers}, threshold={threshold}")
-                        # Create dataloaders with current batch size
-                        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-                        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+                    print(
+                        f"\nTraining with: lr={lr}, hidden_size={hidden_size}, batch_size={batch_size}, layers={num_layers}")
 
-                        model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
-                        optimizer = optim.Adam(model.parameters(), lr=lr)
+                    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+                    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-                        # Add scheduler for learning rate
-                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3,
-                                                                               factor=0.1, verbose=True)
+                    model = MLPRegressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(device)
+                    optimizer = optim.Adam(model.parameters(), lr=lr)
 
-                        # Call with early stopping and learning rate scheduler
-                        val_loss, model_state = train_model(
-                            model,
-                            train_loader,
-                            val_loader,
-                            optimizer,
-                            regression_loss_fn,
-                            classification_loss_fn,
-                            device,
-                            NUM_EPOCHS,
-                            scheduler=scheduler
-                        )
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3,
+                                                                           factor=0.1, verbose=True)
 
-                        # Evaluate classification accuracy on the validation set
-                        model.eval()  # Set the model to evaluation mode
-                        val_classification_accuracies = []  # List to store classification accuracies for each batch
+                    val_score, model_state = train_model(
+                        model,
+                        train_loader,
+                        val_loader,
+                        optimizer,
+                        regression_loss_fn,
+                        classification_loss_fn,
+                        device,
+                        NUM_EPOCHS,
+                        scheduler=scheduler,
+                        reg_weight=1.0,
+                        class_weight=1.0
+                    )
 
-                        with torch.no_grad():  # Disable gradient computation for validation
-                            for X_batch, Y_batch in val_loader:  # Iterate through validation data batches
-                                X_batch = X_batch.to(device)  # Move input batch to the selected device (CPU or GPU)
-                                Y_batch = Y_batch.to(device)  # Move target batch to the selected device
+                    print(f"Hyperparams (lr={lr}, hidden={hidden_size}, batch={batch_size}, layers={num_layers})")
+                    print(f"Combined validation score: {val_score:.4f}")
 
-                                # Perform forward pass to get regression and classification outputs
-                                regression_outputs, classification_outputs = model(X_batch)
-
-                                # Define classification targets based on the distance threshold
-                                classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
-
-                                # Generate classification predictions based on the threshold
-                                classification_preds = (classification_outputs > threshold).float()
-
-                                # Calculate batch accuracy
-                                accuracy = (classification_preds == classification_targets).float().mean().item()
-
-                                # Append batch accuracy to the list
-                                val_classification_accuracies.append(accuracy)
-
-                        # Compute average classification accuracy over all batches
-                        avg_val_classification_accuracy = np.mean(val_classification_accuracies)
-
-                        print(
-                            f"Hyperparams (lr={lr}, hidden={hidden_size}, batch={batch_size}, layers={num_layers}, thresh={threshold})")
-                        print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {avg_val_classification_accuracy:.4f}")
-
-                        # Update best hyperparameters if the current configuration is better
-                        if avg_val_classification_accuracy > best_overall_val_loss:
-                            print("New best hyperparameters found!")
-                            best_overall_val_loss = avg_val_classification_accuracy
-                            best_hyperparams = {
-                                "input_dim": input_dim,
-                                "output_dim": output_dim,
-                                "lr": lr,
-                                "hidden_size": hidden_size,
-                                "batch_size": batch_size,
-                                "num_epochs": NUM_EPOCHS,
-                                "num_layers": num_layers
-                            }
-                            best_model_state = model_state
-                            best_threshold = threshold
-
-                            # Create test loader with best batch size for final evaluation
-                            test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+                    if val_score < best_overall_val_loss:
+                        print("New best hyperparameters found!")
+                        best_overall_val_loss = val_score
+                        best_hyperparams = {
+                            "input_dim": input_dim,
+                            "output_dim": output_dim,
+                            "lr": lr,
+                            "hidden_size": hidden_size,
+                            "batch_size": batch_size,
+                            "num_epochs": NUM_EPOCHS,
+                            "num_layers": num_layers
+                        }
+                        best_model_state = model_state
+                        # best_threshold = not needed anymore unless you're post-processing predictions
+                        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     if best_hyperparams is None:
         print("Error: No valid hyperparameters found during grid search.")
@@ -155,8 +123,7 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     print("\nBest hyperparameters found:")
     print(best_hyperparams)
-    print(f"Best classification threshold: {best_threshold}")
-    print(f"Best validation classification accuracy: {best_overall_val_loss:.4f}")
+    print(f"Best overall validation loss: {best_overall_val_loss:.4f}")
     # Build the best model with all best hyperparameters
     best_model = MLPRegressor(input_dim, best_hyperparams["hidden_size"], output_dim,
                               num_layers=best_hyperparams["num_layers"]).to(device)
@@ -275,7 +242,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     start_multiprocessing_plotting(
         Y_true, Y_pred, classifications, original_distances_test,
         NUM_EPOCHS, best_hyperparams['num_layers'], cartesian_folder, scan_index_folder,
-        best_threshold, chosen_dataset
+        CLASSIFICATION_THRESHOLDS, chosen_dataset
     )
 
     print(f"Best model saved to {model_file}")
@@ -310,3 +277,9 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     print("Error metrics saved")
     print("Model training and evaluation complete.")
+
+    print("\nBest hyperparameters found:")
+    print(best_hyperparams)
+    print(f"Best overall validation loss: {best_overall_val_loss:.4f}")
+    print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
+
