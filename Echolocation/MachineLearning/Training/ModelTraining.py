@@ -1,147 +1,140 @@
+## ModelTraining.py
 #!/usr/bin/env python3
 import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from Echolocation.MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD, REGRESSION_WEIGHT, CLASSIFICATION_WEIGHT
+from Echolocation.MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
 from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 
 # ---------------------------
-# Training Function
+# Training Functions
 # ---------------------------
-def train_model(model, train_loader, val_loader, optimizer, regression_loss_fn, classification_loss_fn,
-                device, num_epochs, patience=PATIENCE, scheduler=None,
-                reg_weight=REGRESSION_WEIGHT, class_weight=CLASSIFICATION_WEIGHT):
-    from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
+class ClassifierDataset(torch.utils.data.Dataset):
+    def __init__(self, predicted_distances, original_distances, threshold):
+        self.X = predicted_distances.float()
+        self.Y = (original_distances <= threshold).float()
 
-    # Initialize variables for tracking the best model state and early stopping
-    best_combined_score = float("inf")
-    best_model_state = None
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.Y[idx]
+
+def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler=None, patience=PATIENCE):
+    model.to(device)
+    best_loss = float("inf")
     patience_counter = 0
 
-    for epoch in range(1, num_epochs + 1):
-        # Training phase
+    for epoch in range(epochs):
         model.train()
         train_losses = []
-
         for X_batch, Y_batch in train_loader:
-            # Move data to the specified device
-            X_batch = X_batch.to(device)
-            Y_batch = Y_batch.to(device)
+            X_batch, Y_batch = X_batch.to(device), Y_batch.to(device)
+
             optimizer.zero_grad()
-
-            # Forward pass
-            regression_outputs, classification_outputs = model(X_batch)
-
-            # Compute regression and classification losses
-            regression_loss = regression_loss_fn(regression_outputs, Y_batch)
-            classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
-            classification_loss = classification_loss_fn(classification_outputs, classification_targets)
-
-            # Combine losses with respective weights
-            loss = reg_weight * regression_loss + class_weight * classification_loss
-            loss.backward()  # Backward pass
-            optimizer.step()  # Update model parameters
+            preds = model(X_batch)
+            loss = loss_fn(preds, Y_batch)
+            loss.backward()
+            optimizer.step()
             train_losses.append(loss.item())
+        avg_training_loss = np.mean(train_losses)
 
-        # Compute average training loss for the epoch
-        avg_train_loss = np.mean(train_losses)
-
-        # --------------------
-        # Validation Phase
-        # --------------------
-        model.eval()  # Set model to evaluation mode
-        val_regression_losses = []
-        val_classification_losses = []
-        all_targets = []
-        all_preds = []
-
-        with torch.no_grad():  # Disable gradient computation
+        # validation
+        model.eval()
+        preds_list, targets_list = [], []
+        val_loss = []
+        with torch.no_grad():
             for X_batch, Y_batch in val_loader:
-                # Move data to the specified device
                 X_batch = X_batch.to(device)
-                Y_batch = Y_batch.to(device)
+                preds = model(X_batch).cpu()
+                preds_list.append(preds)
+                targets_list.append(Y_batch)
+                val_loss.append(loss_fn(preds, Y_batch).item())
 
-                # Forward pass
-                regression_outputs, classification_outputs = model(X_batch)
-
-                # Compute validation regression and classification losses
-                regression_loss = regression_loss_fn(regression_outputs, Y_batch)
-                classification_targets = (Y_batch <= DISTANCE_THRESHOLD).float()
-                classification_loss = classification_loss_fn(classification_outputs, classification_targets)
-
-                val_regression_losses.append(regression_loss.item())
-                val_classification_losses.append(classification_loss.item())
-
-                # Collect targets and predictions for metric computation
-                all_targets.extend(classification_targets.cpu().numpy().flatten())
-                all_preds.extend(classification_outputs.cpu().numpy().flatten())
-
-        # Compute average validation losses
-        avg_reg_loss = np.mean(val_regression_losses)
-        avg_class_loss = np.mean(val_classification_losses)
-
-        # Apply sigmoid threshold for binary classification predictions
-        thresholded_preds = (np.array(all_preds) > 0.5).astype(int)
-        all_targets = np.array(all_targets).astype(int)
-
-        # Compute classification metrics
-        precision = precision_score(all_targets, thresholded_preds, zero_division=0)
-        recall = recall_score(all_targets, thresholded_preds, zero_division=0)
-        f1_classifier = f1_score(all_targets, thresholded_preds, zero_division=0)
-        try:
-            roc_auc = roc_auc_score(all_targets, all_preds)
-        except ValueError:  # Handle cases where ROC AUC cannot be computed
-            roc_auc = float('nan')
-
-        # Compute combined loss for early stopping and logging
-        combined_loss = reg_weight * avg_reg_loss + class_weight * (1 - f1_classifier)  # minimizing
-
-        # Logging the metrics and losses for the epoch
-        print(
-            f"Epoch {epoch}/{num_epochs}\n"
-            f"  Train Loss: {avg_train_loss:.4f}\n"
-            f"  Val Regression Loss: {avg_reg_loss:.4f}, Val Classification Loss: {avg_class_loss:.4f}\n"
-            f"  Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}, ROC AUC: {roc_auc:.4f}\n"
-            f"  Combined loss: {combined_loss:.4f}"
-        )
+        avg_val_loss = np.mean(val_loss)
+        print(f"[Regressor] Epoch {epoch + 1}/{epochs}, Train Loss: {avg_training_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+        combined_loss = avg_training_loss + avg_val_loss
 
         # Adjust the learning rate using the scheduler if provided
         if scheduler:
             scheduler.step(combined_loss)
-            print(f"  Learning rate: {scheduler.get_last_lr()[0]:.6f}")
+            print(f"    Learning rate: {scheduler.get_last_lr()[0]:.6f}")
 
-        # Save the best model state if the combined loss improves
-        if combined_loss < best_combined_score:
-            best_combined_score = combined_loss
-            best_model_state = model.state_dict()
-            patience_counter = 0  # Reset patience counter
+        # Early stopping logic
+        if combined_loss < best_loss:
+            best_loss = combined_loss
+            patience_counter = 0
         else:
-            patience_counter += 1  # Increment patience counter
-            print(f"  No improvement. Patience counter: {patience_counter}/{patience}")
-            if patience_counter >= patience:  # Check for early stopping condition
-                print("  Early stopping triggered.")
+            patience_counter += 1
+            print(f"    No improvement. Patience counter: {patience_counter}/{patience}")
+            if patience_counter >= patience:
+                print("Early stopping triggered.")
                 break
 
-    # Return the best combined loss and best model state
-    return best_combined_score, best_model_state
+    return model
 
-
-def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
+def evaluate_regressor(model, dataloader, device):
     model.eval()
-    base_preds, _ = model(torch.tensor(X_val, dtype=torch.float32).to(device))
-    base_loss = loss_fn(base_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
+    preds_list, targets_list = [], []
+    with torch.no_grad():
+        for X_batch, Y_batch in dataloader:
+            X_batch = X_batch.to(device)
+            preds = model(X_batch).cpu()
+            preds_list.append(preds)
+            targets_list.append(Y_batch)
+    return torch.cat(preds_list), torch.cat(targets_list)
 
-    importances = []
-    for i in range(X_val.shape[1]):
-        X_permuted = X_val.copy()
-        np.random.shuffle(X_permuted[:, i])
-        permuted_preds, _ = model(torch.tensor(X_permuted, dtype=torch.float32).to(device))
-        permuted_loss = loss_fn(permuted_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
-        importance = permuted_loss - base_loss
-        importances.append(importance)
 
-    return importances
+def train_classifier(model, classifier_loader_val, optimizer, loss_fn, device, epochs, scheduler, patience=PATIENCE):
+    model.train()
+    best_loss = float("inf")
+    patience_counter = 0
+
+    for epoch in range(epochs):  # run for specified epochs
+        total_loss = 0
+        for Xb, Yb in classifier_loader_val:
+            Xb, Yb = Xb.to(device), Yb.to(device)
+            optimizer.zero_grad()
+            pred = model(Xb)
+            loss = loss_fn(pred, Yb)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+
+        avg_training_loss = total_loss / len(classifier_loader_val)
+        print(f"[Classifier] Epoch {epoch + 1}/{epochs}, Loss: {avg_training_loss:.5f}")
+
+        if avg_training_loss < best_loss:
+            best_loss = avg_training_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            print(f"No improvement. Patience counter: {patience_counter}/{patience}")
+            if patience_counter >= patience:
+                print("Early stopping triggered.")
+                break
+
+    return model
+
+def evaluate_classifier(model, classifier_loader_val, device,predicted_val, y_val_labels):
+    model.eval()
+    with torch.no_grad():
+        outputs = model(predicted_val.to(device)).cpu().numpy()
+    y_val_preds = outputs.flatten()
+    y_val_labels_flat = y_val_labels.flatten().numpy()
+
+    y_val_preds_thresholded = (y_val_preds > 0.5).astype(int)
+    # Compute classification metrics
+    precision = precision_score(y_val_labels_flat, y_val_preds_thresholded, zero_division=0)
+    recall = recall_score(y_val_labels_flat, y_val_preds_thresholded, zero_division=0)
+    f1_classifier = f1_score(y_val_labels_flat, y_val_preds_thresholded, zero_division=0)
+    print(
+        f"  Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}\n"
+    )
+
+    return y_val_preds, y_val_labels_flat
 
 def compute_error_metrics(Y_true, Y_pred):
     range_bins = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
@@ -171,3 +164,21 @@ def compute_error_metrics(Y_true, Y_pred):
         }
 
     return error_metrics_results
+
+
+
+def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
+    model.eval()
+    base_preds, _ = model(torch.tensor(X_val, dtype=torch.float32).to(device))
+    base_loss = loss_fn(base_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
+
+    importances = []
+    for i in range(X_val.shape[1]):
+        X_permuted = X_val.copy()
+        np.random.shuffle(X_permuted[:, i])
+        permuted_preds, _ = model(torch.tensor(X_permuted, dtype=torch.float32).to(device))
+        permuted_loss = loss_fn(permuted_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()
+        importance = permuted_loss - base_loss
+        importances.append(importance)
+
+    return importances
