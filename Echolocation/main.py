@@ -14,7 +14,7 @@ from MachineLearning.ModelPredict import load_model as load_model
 
 def main():
     train_predict_input = input("Would you like to train or predict? (t/p) ").strip().lower()
-    if train_predict_input == "t" or int(train_predict_input) == 0:
+    if train_predict_input == "t" or str(train_predict_input) == "0":
         dataset_root_path = os.path.join("./Echolocation/Data", "dataset")
         chosen_dataset = None
         # checking if the dataset directory exists (whether we have any data)
@@ -67,7 +67,7 @@ def main():
         mainTraining.model_training(dataset_root_path, chosen_dataset)
         print("Model training complete.")
 
-    elif train_predict_input == "p" or train_predict_input == 1:
+    elif train_predict_input == "p" or str(train_predict_input) == "1":
         print("predict script")
         model, hyperparameters = load_model(200, 2)
         print("Model: \n", model)

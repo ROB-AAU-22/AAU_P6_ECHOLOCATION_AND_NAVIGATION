@@ -72,3 +72,29 @@ class MLPRegressor(nn.Module):
         classification_output = self.classification_head(shared)
         # Return both regression and classification outputs
         return regression_output, classification_output
+
+
+class Regressor(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
+        super().__init__()
+        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        for _ in range(num_layers - 1):
+            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+        layers.append(nn.Linear(hidden_dim, output_dim))
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.model(x)
+
+class Classifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=1):
+        super().__init__()
+        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        for _ in range(num_layers - 1):
+            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+        layers.append(nn.Linear(hidden_dim, output_dim))
+        layers.append(nn.Sigmoid())
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.model(x)

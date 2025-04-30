@@ -20,26 +20,37 @@ from sklearn.model_selection import train_test_split
 class MLPRegressor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
         """
-        A simple feedforward neural network for regression.
-        
-        Parameters:
-          - input_dim: number of input features.
-          - hidden_dim: size of the hidden layer.
-          - output_dim: dimensionality of the target (LiDAR scan length).
-          - num_layers: number of hidden layers (default=2).
+            A simple feedforward neural network for regression and classification.
+
+            Parameters:
+              - input_dim: number of input features.
+              - hidden_dim: size of the hidden layer.
+              - output_dim: dimensionality of the target (LiDAR scan length).
+              - num_layers: number of hidden layers (default=2).
         """
         super(MLPRegressor, self).__init__()
         layers = []
+        # Add the first hidden layer
         layers.append(nn.Linear(input_dim, hidden_dim))
         layers.append(nn.ReLU())
+        # Add additional hidden layers based on num_layers
         for i in range(num_layers - 1):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.ReLU())
-        layers.append(nn.Linear(hidden_dim, output_dim))
-        self.model = nn.Sequential(*layers)
-        
+        # Define the regression head
+        self.regression_head = nn.Sequential(*layers, nn.Linear(hidden_dim, output_dim))
+        # Define the classification head with sigmoid activation for probabilities
+        self.classification_head = nn.Sequential(nn.Linear(hidden_dim, output_dim), nn.Sigmoid())
+
     def forward(self, x):
-        return self.model(x)
+        # Pass input through the shared regression layers excluding the last layer
+        shared = self.regression_head[:-1](x)
+        # Compute regression output using the final layer of regression head
+        regression_output = self.regression_head[-1](shared)
+        # Compute classification output
+        classification_output = self.classification_head(shared)
+        # Return both regression and classification outputs
+        return regression_output, classification_output
 
 class AudioLidarDataset(Dataset):
     def __init__(self, X, Y):
@@ -56,7 +67,7 @@ class AudioLidarDataset(Dataset):
         return self.X[index], self.Y[index]
 
 def load_model(epochs, layers):
-    model_file = os.path.join("Extracted features", "models", f"lidar_prediction_model_tuned_torch_{epochs}_{layers}.pth")
+    model_file = os.path.join("Echolocation/Models", f"echolocation-wide-long-all_{epochs}_{layers}_model.pth")
     model_checkpoint = torch.load(model_file)
     
     hyperparams = model_checkpoint['hyperparameters']
