@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import csv
+import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,6 +14,7 @@ from Echolocation.MachineLearning.Training.DataHandler import build_dataset_from
 from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
 from Echolocation.MachineLearning.Training.ModelTraining import train_model, compute_error_metrics
 from Echolocation.MachineLearning.Training.Plotting import start_multiprocessing_plotting
+from Echolocation.MachineLearning.Training.EvaluationPlots import plot_precision_recall_curve, plot_confusion_matrix_all, plot_roc_curve
 
 
 def model_training(dataset_root_directory, chosen_dataset):
@@ -131,7 +133,9 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     # Evaluate on the test set.
     best_model.eval()
-    test_losses = []  # List to store the overall losses for the test set
+    test_losses_combined = []  # List to store the overall losses for the test set
+    test_losses_classification = []  # List to store the overall losses for the test set
+    test_losses_regression = []  # List to store the overall losses for the test set
     all_preds = []  # List to store all regression predictions
     all_targets = []  # List to store all ground truth values
     all_classifications = []  # List to store all classification predictions
@@ -157,7 +161,9 @@ def model_training(dataset_root_directory, chosen_dataset):
             loss = regression_loss + classification_loss
 
             # Store the overall loss for this batch
-            test_losses.append(loss.item())
+            test_losses_combined.append(loss.item())
+            test_losses_classification.append(classification_loss.item())
+            test_losses_regression.append(regression_loss.item())
 
             # Save predictions and targets for later analysis
             all_preds.append(regression_outputs.cpu().numpy())
@@ -165,13 +171,41 @@ def model_training(dataset_root_directory, chosen_dataset):
             all_classifications.append(classification_outputs.cpu().numpy())
 
     # Compute average loss across the test set
-    avg_test_loss = np.mean(test_losses)
-    print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
+    avg_test_loss = np.mean(test_losses_combined)
+    avg_test_loss_class = np.mean(test_losses_classification)
+    avg_test_loss_reg = np.mean(test_losses_regression)
+    print(f"\nCombined Mean Squared Error on test set: {avg_test_loss:.4f}")
+    print(f"Classification Mean Squared Error on test set: {avg_test_loss_class:.4f}")
+    print(f"Regression Mean Squared Error on test set: {avg_test_loss_reg:.4f}")
 
     # Concatenate predictions for plotting.
     Y_pred = np.concatenate(all_preds, axis=0)
     Y_true = np.concatenate(all_targets, axis=0)
     classifications = np.concatenate(all_classifications, axis=0)
+
+    # add mm-dd-hh:mm:ss to dataset
+    time_stamp = time.strftime("%m-%d_%H-%M-%S")
+    dataset_iter = chosen_dataset + "_" + time_stamp
+
+    metrics_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset,  dataset_iter,
+                                  "evaluation_metrics")
+    os.makedirs(metrics_folder, exist_ok=True)
+
+    # Compute binary labels for classification
+    y_class_targets = (Y_true <= DISTANCE_THRESHOLD).astype(int).flatten()
+    y_class_probs = classifications.flatten()
+
+    # Optional: Override threshold
+    threshold_to_use = CLASSIFICATION_THRESHOLDS[0]
+
+    # Plot metrics
+    plot_precision_recall_curve(y_class_targets, y_class_probs,
+                                save_path=os.path.join(metrics_folder, "precision_recall_curve.png"))
+    plot_confusion_matrix_all(y_class_targets, y_class_probs, threshold=threshold_to_use,
+                              save_path=os.path.join(metrics_folder, "confusion_matrix.png"))
+    plot_roc_curve(y_class_targets, y_class_probs, save_path=os.path.join(metrics_folder, "roc_curve.png"))
+
+    print("Saved precision-recall and confusion matrix plots.")
 
     mae_array = []
     rmse_array = []
@@ -231,18 +265,19 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     print("Saving comparison plots...")
     # Create folders
-    cartesian_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset,
+    cartesian_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter,
                                     f"cartesian_plots_{NUM_EPOCHS}_{best_hyperparams['num_layers']}")
-    scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset,
+    scan_index_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter,
                                      f"scan_index_plots_{NUM_EPOCHS}_{best_hyperparams['num_layers']}")
     os.makedirs(cartesian_folder, exist_ok=True)
     os.makedirs(scan_index_folder, exist_ok=True)
+
 
     # Create and start workers
     start_multiprocessing_plotting(
         Y_true, Y_pred, classifications, original_distances_test,
         NUM_EPOCHS, best_hyperparams['num_layers'], cartesian_folder, scan_index_folder,
-        CLASSIFICATION_THRESHOLDS, chosen_dataset
+        CLASSIFICATION_THRESHOLDS, dataset_iter
     )
 
     print(f"Best model saved to {model_file}")
@@ -260,7 +295,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     # Saving error metrics to seperate CSV for each range
     header = ['chirp', 'range', 'best_validation_loss', 'mean_absolute_error', 'root_mean_square_error',
               'mean_relative_error']
-    error_metrics_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", "error_metrics.csv")
+    error_metrics_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, "error_metrics.csv")
     for range_bin in range_metrics_average:
         row = [chosen_dataset, range_bin, best_overall_val_loss, range_metrics_average[range_bin]['mae'],
                range_metrics_average[range_bin]['rmse'], range_metrics_average[range_bin]['mre']]
@@ -278,8 +313,15 @@ def model_training(dataset_root_directory, chosen_dataset):
     print("Error metrics saved")
     print("Model training and evaluation complete.")
 
-    print("\nBest hyperparameters found:")
-    print(best_hyperparams)
-    print(f"Best overall validation loss: {best_overall_val_loss:.4f}")
-    print(f"\nMean Squared Error on test set: {avg_test_loss:.4f}")
+    print(
+        f"\nBest hyperparameters found:\n{best_hyperparams}\n"
+        f"Best overall validation loss: {best_overall_val_loss:.4f}\n"
+        f"Combined Mean Squared Error on test set: {avg_test_loss:.4f}\n"
+        f"Classification Mean Squared Error on test set: {avg_test_loss_class:.4f}\n"
+        f"Regression Mean Squared Error on test set: {avg_test_loss_reg:.4f}\n"
+        f"Mean Absolute Error: {mean_absolute_error:.4f}\n"
+        f"Root Mean Square Error: {root_mean_square_error:.4f}\n"
+        f"Mean Relative Error: {mean_relative_error:.4f}\n"
+        f"Classification Accuracy: {classification_accuracy:.4f}"
+    )
 

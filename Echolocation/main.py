@@ -2,6 +2,7 @@
 import os
 import subprocess
 import sys
+import time
 
 # Import local scripts
 from FeatureExtraction import FeatureExtractionScript
@@ -49,6 +50,7 @@ def main():
         else:
             print("Skipping feature extraction.")
 
+
         # train model based on features
         extracted_features_path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset,
                                                "features_all_normalized.csv")
@@ -60,7 +62,7 @@ def main():
             print("Normalizing features...")
             NormalizeFeatures.normalize_features(chosen_dataset)
 
-        # otherwise train model
+        # train model
         print("Training model...")
         mainTraining.model_training(dataset_root_path, chosen_dataset)
         print("Model training complete.")
