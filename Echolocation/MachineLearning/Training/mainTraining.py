@@ -74,13 +74,13 @@ def model_training(dataset_root_directory, chosen_dataset):
                     # Initialize model and optimizer
                     regressor = Regressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(
                         device)
-                    optimizer_r = optim.Adam(regressor.parameters(), lr=lr)
+                    optimizer_r = optim.Adam(regressor.parameters(), lr=lr, weight_decay=1e-4)
 
                     # scheduler
-                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_r, mode='min', factor=0.1, patience=5, verbose=True)
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_r, mode='min', factor=0.1, patience=5)
 
                     # Train regressor
-                    regressor = train_regressor(
+                    regressor, avg_val_loss, preds_train_list, preds_val_list, targets_train_list, targets_val_list = train_regressor(
                         regressor,
                         DataLoader(train_dataset, batch_size=batch_size, shuffle=True),
                         DataLoader(val_dataset, batch_size=batch_size, shuffle=False),
@@ -91,18 +91,11 @@ def model_training(dataset_root_directory, chosen_dataset):
                         scheduler
                     )
 
-                    # Predict on validation set
-                    predicted_val, true_val = evaluate_regressor(
-                        regressor, DataLoader(val_dataset, batch_size=batch_size), device
-                    )
+                    print(f"Val Accuracy: {avg_val_loss:.4f}")
 
-                    val_regressor_loss = regression_loss_fn(predicted_val, true_val).item()
-
-                    print(f"Val Accuracy: {val_regressor_loss:.4f}")
-
-                    if val_regressor_loss < best_regressor_val_loss:
+                    if avg_val_loss < best_regressor_val_loss:
                         print("New best regressor model found.")
-                        best_regressor_val_loss = val_regressor_loss
+                        best_regressor_val_loss = avg_val_loss
                         best_regressor_hyperparams = {
                             "input_dim": input_dim,
                             "output_dim": output_dim,
@@ -113,6 +106,14 @@ def model_training(dataset_root_directory, chosen_dataset):
                             "num_layers": num_layers
                         }
                         best_regressor_state = regressor.state_dict()
+                        #best_regressor_train_preds = np.concatenate(preds_train_list, axis=0).flatten()
+                        #best_regressor_val_preds = np.concatenate(preds_val_list, axis=0).flatten()
+                        best_regressor_train_preds = preds_train_list
+                        best_regressor_val_preds = preds_val_list
+                        #best_regressor_train_targets = np.concatenate(targets_train_list, axis=0).flatten()
+                        #best_regressor_val_targets = np.concatenate(targets_val_list, axis=0).flatten()
+                        best_regressor_train_targets = targets_train_list
+                        best_regressor_val_targets = targets_val_list
                         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     if best_regressor_hyperparams is None:
@@ -123,45 +124,52 @@ def model_training(dataset_root_directory, chosen_dataset):
                                num_layers=best_regressor_hyperparams["num_layers"]).to(device)
     best_regressor.load_state_dict(best_regressor_state)
 
-    # Generate validation set predictions using best regressor model
-    predicted_val, true_val = evaluate_regressor(
-        best_regressor, DataLoader(val_dataset, batch_size=best_regressor_hyperparams["batch_size"]), device
-    )
-    y_val_labels = (true_val <= DISTANCE_THRESHOLD).float()
+
+    #y_val_labels = (original_distances <= DISTANCE_THRESHOLD).float()
     print("\nStarting classification grid search with best regressor model...")
-    # Create classifier dataset from regressor validation predictions
-    classifier_dataset_val = ClassifierDataset(predicted_val, true_val, DISTANCE_THRESHOLD)
+    # Create classifier training dataset from all regressor predictions
+    #print(f"train preds: {best_regressor_train_preds}")
+    #print(f"train targets: {best_regressor_train_targets}")
+    classifier_dataset_train = ClassifierDataset(best_regressor_train_preds, best_regressor_train_targets)
+    classifier_dataset_val = ClassifierDataset(best_regressor_val_preds, best_regressor_val_targets)
 
     # Grid search over classification hyperparameters
     for lr in LEARNING_RATES:
         for hidden_size in HIDDEN_SIZES:
             for batch_size in BATCH_SIZES:
                 for num_layers in NUM_LAYERS_LIST:
-                    classifier_loader_val = DataLoader(classifier_dataset_val, batch_size=batch_size, shuffle=True)
 
                     classifier = Classifier(input_dim=output_dim, hidden_dim=hidden_size, output_dim=output_dim, num_layers=num_layers).to(device)
-                    optimizer_c = optim.Adam(classifier.parameters(), lr=lr)
+                    optimizer_c = optim.Adam(classifier.parameters(), lr=lr, weight_decay=1e-4)
 
                     print(
                         f"\nTraining Classifier: lr={lr}, hidden={hidden_size}, batch={batch_size}")
 
                     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_r, mode='min', factor=0.1,
-                                                                           patience=5, verbose=True)
+                                                                           patience=5)
 
-                    classifier = train_classifier(classifier, classifier_loader_val, optimizer_c, classification_loss_fn,
-                                                  device, NUM_EPOCHS,scheduler)
+                    classifier, avg_val_loss = train_classifier(
+                        classifier,
+                        DataLoader(classifier_dataset_train, batch_size=batch_size, shuffle=True),
+                        DataLoader(classifier_dataset_val, batch_size=batch_size, shuffle=False),
+                        optimizer_c,
+                        classification_loss_fn,
+                        device,
+                        NUM_EPOCHS,
+                        scheduler
+                    )
 
                     # Evaluate classifier performance on val set
-                    y_val_preds, y_val_labels_flat = evaluate_classifier(
-                        classifier, classifier_loader_val, device, predicted_val, y_val_labels
-                    )
-                    val_classifier_accuracy = np.mean((y_val_preds > 0.5) == y_val_labels_flat)
+                    #y_val_preds, y_val_labels_flat = evaluate_classifier(
+                    #    classifier, classifier_loader_val, device, predicted_val, y_val_labels
+                    #)
+                    #val_classifier_accuracy = np.mean((y_val_preds > 0.5) == y_val_labels_flat)
 
-                    print(f"Val Accuracy: {val_classifier_accuracy:.4f}")
+                    print(f"Val Accuracy: {avg_val_loss:.4f}")
 
-                    if val_classifier_accuracy < best_classifier_val_loss:
+                    if avg_val_loss < best_classifier_val_loss:
                         print("New best classifier model found.")
-                        best_classifier_val_loss = val_classifier_accuracy
+                        best_classifier_val_loss = avg_val_loss
                         best_classifier_hyperparams = {
                             "input_dim": output_dim,
                             "output_dim": output_dim,
@@ -185,7 +193,7 @@ def model_training(dataset_root_directory, chosen_dataset):
     # Build and load the best classifier model
     best_classifier = Classifier(input_dim=best_classifier_hyperparams["input_dim"], hidden_dim=best_classifier_hyperparams["hidden_size"], output_dim= best_classifier_hyperparams["output_dim"],
                                num_layers=best_classifier_hyperparams["num_layers"]).to(device)
-    best_classifier.load_state_dict(best_classifier_state, strict=False)
+    best_classifier.load_state_dict(best_classifier_state, strict=True)
 
     # Run regression on test set
     predicted_test, ground_truth_test = evaluate_regressor(
@@ -217,7 +225,6 @@ def model_training(dataset_root_directory, chosen_dataset):
     y_class_targets = (Y_true <= DISTANCE_THRESHOLD).astype(int).flatten()
     y_class_probs = classifications.flatten()
 
-    # Optional: Override threshold
     threshold_to_use = CLASSIFICATION_THRESHOLDS[0]
 
     # Plot metrics
@@ -336,10 +343,13 @@ def model_training(dataset_root_directory, chosen_dataset):
 
     print("Error metrics saved")
     print("Model training and evaluation complete.")
+    print("\nBest hyperparameters found:")
+    print("Best regressor hyperparams:\n", best_regressor_hyperparams)
+    print(f"Best overall regressor loss: {best_regressor_val_loss:.4f}")
 
     print(
-        f"\nBest hyperparameters found:\n{best_classifier_hyperparams}\n"
-        f"Best overall validation loss: {best_classifier_val_loss:.4f}\n"
+        f"\nBest classifier hyperparameters:\n{best_classifier_hyperparams}\n"
+        f"Best overall classifier loss: {best_classifier_val_loss:.4f}\n"
         f"Mean Absolute Error: {mean_absolute_error:.4f}\n"
         f"Root Mean Square Error: {root_mean_square_error:.4f}\n"
         f"Mean Relative Error: {mean_relative_error:.4f}\n"

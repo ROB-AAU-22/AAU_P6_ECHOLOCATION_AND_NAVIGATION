@@ -4,8 +4,8 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Process, Queue, cpu_count
-from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD
-DPI = 200
+from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, PLOT_DPI
+DPI = PLOT_DPI
 
 def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):
     angles = np.linspace(angle_range[0], angle_range[1], num=len(distances))
@@ -61,7 +61,7 @@ def plot_worker(queue, worker_id):
             elif task_type == 'scan_index':
                 print(f"Worker {worker_id} plotting scan index LiDAR for sample {i}...")
                 ax.plot(Y_true_i, label="Ground Truth LiDAR", marker="o")
-                ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
+                #ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
                 ignored_gt = original_gt_i > DISTANCE_THRESHOLD
                 ax.scatter(np.arange(len(original_gt_i))[ignored_gt], original_gt_i[ignored_gt], color='red', marker='o', label='Ignored GT')
                 classified_as_object = classifications_i > best_threshold

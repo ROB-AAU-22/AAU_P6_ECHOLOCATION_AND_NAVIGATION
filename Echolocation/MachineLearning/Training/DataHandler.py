@@ -5,7 +5,7 @@ import ast
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD
+from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, DISTANCE_THRESHOLD_ENABLED
 
 
 def build_dataset_from_csv(csv_file, dataset_root):
@@ -95,7 +95,8 @@ def build_dataset_from_csv(csv_file, dataset_root):
             # Save original distances for later analysis
             original_distances.append(lidar_vector.copy())
             # Apply distance threshold, replacing values above it with NaN
-            lidar_vector[lidar_vector > DISTANCE_THRESHOLD] = np.nan
+            if DISTANCE_THRESHOLD_ENABLED:
+                lidar_vector[lidar_vector > DISTANCE_THRESHOLD] = np.nan
 
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
