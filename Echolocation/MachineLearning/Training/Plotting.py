@@ -4,7 +4,8 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Process, Queue, cpu_count
-from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD
+from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, PLOT_DPI
+DPI = PLOT_DPI
 
 def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):
     angles = np.linspace(angle_range[0], angle_range[1], num=len(distances))
@@ -22,7 +23,7 @@ def plot_worker(queue, worker_id):
             task_type, data = task
             i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder, best_threshold, chosen_dataset = data
 
-            fig, ax = plt.subplots(figsize=(8, 8) if task_type == 'cartesian' else (10, 6))
+            fig, ax = plt.subplots(figsize=(8, 8) if task_type == 'cartesian' else (10, 6), dpi=DPI)
             if task_type == 'cartesian':
                 print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
                 gt_x, gt_y = polar_to_cartesian(Y_true_i)
@@ -57,10 +58,10 @@ def plot_worker(queue, worker_id):
                 ax.set_title(f"{chosen_dataset}-{i}")
                 ax.grid(True)
                 ax.legend()
-            else:
+            elif task_type == 'scan_index':
                 print(f"Worker {worker_id} plotting scan index LiDAR for sample {i}...")
                 ax.plot(Y_true_i, label="Ground Truth LiDAR", marker="o")
-                ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
+                #ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
                 ignored_gt = original_gt_i > DISTANCE_THRESHOLD
                 ax.scatter(np.arange(len(original_gt_i))[ignored_gt], original_gt_i[ignored_gt], color='red', marker='o', label='Ignored GT')
                 classified_as_object = classifications_i > best_threshold
@@ -73,9 +74,12 @@ def plot_worker(queue, worker_id):
                 ax.grid(True)
                 ax.legend()
 
-            plot_type = 'cartesian' if task_type == 'cartesian' else 'scan_index'
-            filename = f"lidar_prediction_{plot_type}_{i}.png"
-            fig.savefig(os.path.join(lidar_plots_folder, filename), bbox_inches='tight')
+            else:
+                raise ValueError(f"Invalid task type: {task_type}")
+
+            #plot_type = 'cartesian' if task_type == 'cartesian' else 'scan_index'
+            filename = f"prediction_{task_type}_{i}.png"
+            fig.savefig(os.path.join(lidar_plots_folder, filename), bbox_inches='tight', dpi=DPI)
             plt.close(fig)
 
         except Exception as e:

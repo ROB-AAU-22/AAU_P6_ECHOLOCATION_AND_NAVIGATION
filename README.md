@@ -13,3 +13,4 @@ Required Python libraries:
 - pytorch
 - sklearn
 - multiprocessing
+- peakutils

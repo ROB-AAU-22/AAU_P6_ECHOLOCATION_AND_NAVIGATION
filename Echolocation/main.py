@@ -2,17 +2,19 @@
 import os
 import subprocess
 import sys
+import time
 
 # Import local scripts
 from FeatureExtraction import FeatureExtractionScript
 from FeatureExtraction import NormalizeFeatures
-from MachineLearning.Training import MainTraining
+from MachineLearning.Training import mainTraining
 from Data import DownloadDataKaggle
+from MachineLearning.ModelPredict import load_model as load_model
+
 
 def main():
-    #train_predict_input = input("Would you like to train or predict? (train/predict) ").strip().lower()
-    #if train_predict_input == "train":
-    if True:
+    train_predict_input = input("Would you like to train or predict? (t/p) ").strip().lower()
+    if train_predict_input == "t" or str(train_predict_input) == "0":
         dataset_root_path = os.path.join("./Echolocation/Data", "dataset")
         chosen_dataset = None
         # checking if the dataset directory exists (whether we have any data)
@@ -37,20 +39,22 @@ def main():
             return
         dataset_root_path = os.path.join(dataset_root_path, chosen_dataset)
         print(f"Selected dataset: {dataset_root_path}")
-        
+
         # optional to extract features
         extract_features_input = input("Would you like to extract features? (y/n) ").strip().lower()
-        if extract_features_input == "y":
+        if extract_features_input == "y" or extract_features_input == 0:
             print("Extracting features...")
             FeatureExtractionScript.extract_features(dataset_root_path, chosen_dataset)
             print("Normalizing features...")
             NormalizeFeatures.normalize_features(chosen_dataset)
         else:
             print("Skipping feature extraction.")
-        
+
+
         # train model based on features
-        extracted_features_path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, "features_all_normalized.csv")
-        
+        extracted_features_path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset,
+                                               "features_all_normalized.csv")
+
         if not os.path.exists(extracted_features_path):
             print(f"Feature file {extracted_features_path} does not exist.")
             print(f"Extracting features for {extracted_features_path}...")
@@ -58,16 +62,20 @@ def main():
             print("Normalizing features...")
             NormalizeFeatures.normalize_features(chosen_dataset)
 
-        # otherwise train model
+        # train model
         print("Training model...")
-        MainTraining.model_training(dataset_root_path, chosen_dataset)
+        mainTraining.model_training(dataset_root_path, chosen_dataset)
         print("Model training complete.")
-        
-    #elif train_predict_input == "predict":
-    #    print("predict script")
+
+    elif train_predict_input == "p" or str(train_predict_input) == "1":
+        print("predict script")
+        model, hyperparameters = load_model(200, 2)
+        print("Model: \n", model)
+        print("hyperparameters: \n", hyperparameters)
     else:
         print("Invalid input. Please enter 'train' or 'predict'.")
         return
+
 
 if __name__ == '__main__':
     main()

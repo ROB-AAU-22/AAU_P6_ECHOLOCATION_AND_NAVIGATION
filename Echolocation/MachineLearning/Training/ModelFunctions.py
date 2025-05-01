@@ -2,17 +2,19 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
+from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD_ENABLED
 
 class MaskedMSELoss(nn.Module):
     def __init__(self):
         super(MaskedMSELoss, self).__init__()
-        self.mse_loss = nn.MSELoss(reduction='none')
+        self.mse_loss = nn.MSELoss(reduction='mean')
 
     def forward(self, outputs, targets):
         # Mask values where targets are NaN or greater than distance_threshold
-        mask = ~torch.isnan(targets)
-        outputs = outputs[mask]
-        targets = targets[mask]
+        if DISTANCE_THRESHOLD_ENABLED:
+            mask = ~torch.isnan(targets)
+            outputs = outputs[mask]
+            targets = targets[mask]
         loss = self.mse_loss(outputs, targets)
         return loss.mean()
 
@@ -72,3 +74,29 @@ class MLPRegressor(nn.Module):
         classification_output = self.classification_head(shared)
         # Return both regression and classification outputs
         return regression_output, classification_output
+
+
+class Regressor(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
+        super().__init__()
+        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        for _ in range(num_layers - 1):
+            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+        layers.append(nn.Linear(hidden_dim, output_dim))
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.model(x)
+
+class Classifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
+        super().__init__()
+        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        for _ in range(num_layers - 1):
+            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+        layers.append(nn.Linear(hidden_dim, output_dim))
+        layers.append(nn.Sigmoid())
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.model(x)
