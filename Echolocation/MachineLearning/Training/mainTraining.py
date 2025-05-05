@@ -35,13 +35,12 @@ def model_training(dataset_root_directory, chosen_dataset):
         print("Y stats: min", np.min(Y), "max", np.max(Y))
 
         # Split dataset into train (70%), validation (15%), and test (15%)
-        X_train_val, X_test, Y_train_val, Y_test, original_distances_train_val, original_distances_test = train_test_split(
-            X, Y, original_distances, test_size=0.15, random_state=42)
-        X_train, X_val, Y_train, Y_val, original_distances_train, original_distances_val = train_test_split(X_train_val,
-                                                                                                            Y_train_val,
-                                                                                                            original_distances_train_val,
-                                                                                                            test_size=0.15,
-                                                                                                            random_state=42)
+        X_train_val, X_test, Y_train_val, Y_test, original_distances_train_val, original_distances_test, sample_ids_train_val, sample_ids_test = train_test_split(
+            X, Y, original_distances, sample_ids, test_size=0.15, random_state=42)
+
+        X_train, X_val, Y_train, Y_val, original_distances_train, original_distances_val, sample_ids_train, sample_ids_val = train_test_split(
+            X_train_val, Y_train_val, original_distances_train_val, sample_ids_train_val, test_size=0.15, random_state=42)
+        
         print("Training samples: ", X_train.shape[0], "Validation samples: ", X_val.shape[0], "Test samples: ",
               X_test.shape[0])
 
@@ -311,10 +310,11 @@ def model_training(dataset_root_directory, chosen_dataset):
 
         # Create and start workers
         start_multiprocessing_plotting(
-            Y_true, Y_pred, classifications, original_distances_test,
-            NUM_EPOCHS, best_regressor_hyperparams['num_layers'], cartesian_folder, scan_index_folder,
-            CLASSIFICATION_THRESHOLDS, dataset_iter
-        )
+    Y_true, Y_pred, classifications, original_distances_test,
+    NUM_EPOCHS, best_regressor_hyperparams['num_layers'], cartesian_folder, scan_index_folder,
+    CLASSIFICATION_THRESHOLDS, dataset_iter, sample_ids_test
+)
+
 
         print(f"Best model saved to {model_file_regressor}")
 
