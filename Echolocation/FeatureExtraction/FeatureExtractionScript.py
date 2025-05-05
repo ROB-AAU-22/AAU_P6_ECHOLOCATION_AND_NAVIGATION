@@ -8,7 +8,7 @@ import soundfile as sf
 import pandas as pd
 from scipy.signal import correlate, coherence
 
-from Echolocation.DataProcessing.CutSoundFile import cut_sound_file
+from DataProcessing.CutSoundFile import cut_sound_file
 
 # --------------------------------------------------
 # Helper Functions

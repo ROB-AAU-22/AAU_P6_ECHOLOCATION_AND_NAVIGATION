@@ -9,13 +9,13 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-from Echolocation.MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, \
+from MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, \
     NUM_LAYERS_LIST, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD, DISTANCE_THRESHOLDS
-from Echolocation.MachineLearning.Training.DataHandler import build_dataset_from_csv
-from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor, Regressor, Classifier
-from Echolocation.MachineLearning.Training.ModelTraining import compute_error_metrics, train_regressor, evaluate_regressor, ClassifierDataset, train_classifier, evaluate_classifier
-from Echolocation.MachineLearning.Training.Plotting import start_multiprocessing_plotting
-from Echolocation.MachineLearning.Training.EvaluationPlots import plot_precision_recall_curve, plot_confusion_matrix_all, plot_roc_curve
+from MachineLearning.Training.DataHandler import build_dataset_from_csv, ClassifierDataset
+from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor, Regressor, Classifier
+from MachineLearning.Training.ModelTraining import compute_error_metrics, train_regressor, evaluate_regressor, train_classifier, evaluate_classifier
+from MachineLearning.Training.Plotting import start_multiprocessing_plotting
+from MachineLearning.Training.EvaluationPlots import plot_precision_recall_curve, plot_confusion_matrix_all, plot_roc_curve
 
 
 def model_training(dataset_root_directory, chosen_dataset):
@@ -60,7 +60,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         best_classifier_val_loss = float("inf")
         best_classifier_hyperparams = None
         best_model_state = None
-        best_threshold = None
+        best_threshold = 0.5
 
         # Define the global custom loss function
         regression_loss_fn = MaskedMSELoss()
@@ -225,7 +225,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         os.makedirs(metrics_folder, exist_ok=True)
 
         # Compute binary labels for classification
-        y_class_targets = (Y_true <= DISTANCE_THRESHOLD).astype(int).flatten()
+        y_class_targets = (Y_true <= distance).astype(int).flatten()
         y_class_probs = classifications.flatten()
 
         threshold_to_use = CLASSIFICATION_THRESHOLDS[0]
@@ -319,7 +319,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         print(f"Best model saved to {model_file_regressor}")
 
         # Evaluate classification accuracy
-        classification_accuracy = (classifications.round() == (Y_true <= DISTANCE_THRESHOLD)).mean()
+        classification_accuracy = ((classifications > best_threshold) == (Y_true <= distance)).mean()
         print(f"Classification Accuracy: {classification_accuracy:.4f}")
         print("\nBest hyperparameters found:")
         print(best_classifier_hyperparams)
@@ -359,4 +359,28 @@ def model_training(dataset_root_directory, chosen_dataset):
             f"Mean Relative Error: {mean_relative_error:.4f}\n"
             f"Classification Accuracy: {classification_accuracy:.4f}"
         )
+        # Save distance threshold and other details to a text file
+        distance_info_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, "models_info.txt")
+        distance_info_text = (
+            f"Distance Threshold: {distance}\n"
+            f"  Best Regressor Hyperparameters: {best_regressor_hyperparams}\n"
+            f"      Best Regressor Loss: {best_regressor_val_loss:.4f}\n"
+            f"  Best Classifier Hyperparameters: {best_classifier_hyperparams}\n"
+            f"      Classification Accuracy: {classification_accuracy:.4f}\n"
+            f"      Best Classifier Loss: {best_classifier_val_loss:.4f}\n"
+            f"      Mean Absolute Error: {mean_absolute_error:.4f}\n"
+            f"      Root Mean Square Error: {root_mean_square_error:.4f}\n"
+            f"      Mean Relative Error: {mean_relative_error:.4f}\n\n\n"
+            
+        )
+
+        # Write or append to the file
+        try:
+            with open(distance_info_file, 'x') as f:
+                f.write(distance_info_text)
+        except FileExistsError:
+            with open(distance_info_file, 'a') as f:
+                f.write("\n" + distance_info_text)
+
+        print(f"Distance threshold and model details saved to {distance_info_file}")
 

@@ -8,7 +8,7 @@ from sklearn.metrics import (
     roc_curve,
     auc
 )
-from Echolocation.MachineLearning.Training.TrainingConfig import PLOT_DPI
+from MachineLearning.Training.TrainingConfig import PLOT_DPI
 DPI = PLOT_DPI
 
 def plot_precision_recall_curve(y_true, y_probs, save_path=None):

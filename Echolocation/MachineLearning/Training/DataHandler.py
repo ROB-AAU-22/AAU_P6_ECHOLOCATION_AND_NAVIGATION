@@ -4,8 +4,9 @@ import json
 import ast
 import numpy as np
 import pandas as pd
+import torch
 from sklearn.model_selection import train_test_split
-from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, DISTANCE_THRESHOLD_ENABLED
+from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, DISTANCE_THRESHOLD_ENABLED
 
 
 def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_THRESHOLD):
@@ -113,3 +114,22 @@ def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_T
 
     # Return features, labels, sample IDs, feature names, and original distances
     return X, Y, sample_ids, feature_names_full, original_distances
+
+
+class ClassifierDataset(torch.utils.data.Dataset):
+    def __init__(self, predicted_distances, original_distances):
+        #print(f"train preds: {predicted_distances}")
+        #print(f"train targets: {original_distances}")
+        self.X = np.float32(predicted_distances)#.float()
+        self.Y = np.float32(~np.isnan(original_distances))#.float()
+        #self.Y = original_distances  # .float()
+
+
+    def __len__(self):
+        return len(self.X)#.shape[0]
+
+    def __getitem__(self, idx):
+        #print(f"train preds: {np.float32(self.X[idx])}")
+        #print(f"train targets: {np.float32(self.Y[idx])}")
+        #self.Y = ~np.isnan(self.Y[idx])
+        return self.X[idx], self.Y[idx]
