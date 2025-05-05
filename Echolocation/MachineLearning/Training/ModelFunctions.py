@@ -2,12 +2,12 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD_ENABLED
+from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD_ENABLED
 
 class MaskedMSELoss(nn.Module):
     def __init__(self):
         super(MaskedMSELoss, self).__init__()
-        self.mse_loss = nn.MSELoss(reduction='mean')
+        self.mse_loss = nn.MSELoss(reduction='none')
 
     def forward(self, outputs, targets):
         # Mask values where targets are NaN or greater than distance_threshold

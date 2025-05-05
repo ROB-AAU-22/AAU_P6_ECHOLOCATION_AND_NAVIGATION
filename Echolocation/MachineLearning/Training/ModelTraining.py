@@ -4,30 +4,14 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from Echolocation.MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
-from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
+from MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
+from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 
 # ---------------------------
 # Training Functions
 # ---------------------------
-class ClassifierDataset(torch.utils.data.Dataset):
-    def __init__(self, predicted_distances, original_distances):
-        #print(f"train preds: {predicted_distances}")
-        #print(f"train targets: {original_distances}")
-        self.X = np.float32(predicted_distances)#.float()
-        self.Y = np.float32(~np.isnan(original_distances))#.float()
-        #self.Y = original_distances  # .float()
 
-
-    def __len__(self):
-        return len(self.X)#.shape[0]
-
-    def __getitem__(self, idx):
-        #print(f"train preds: {np.float32(self.X[idx])}")
-        #print(f"train targets: {np.float32(self.Y[idx])}")
-        #self.Y = ~np.isnan(self.Y[idx])
-        return self.X[idx], self.Y[idx]
 
 def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler=None, patience=PATIENCE):
     model.to(device)
@@ -140,9 +124,11 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
         val_labels = np.concatenate(val_labels).flatten()
         avg_val_loss = np.mean(val_loss)
         avg_loss = avg_training_loss + avg_val_loss
+        
+        classification_accuracy = ((val_preds > 0.5) == (val_labels)).mean()
 
         print(
-            f"[Classifier] Epoch {epoch + 1}/{epochs}, Train Loss: {avg_training_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+            f"[Classifier] Epoch {epoch + 1}/{epochs}, Train Loss: {avg_training_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Classification Accuracy: {classification_accuracy:.4f}")
 
         #print(f"val preds: {val_preds}")
         #print(f"val labels: {val_labels}")
