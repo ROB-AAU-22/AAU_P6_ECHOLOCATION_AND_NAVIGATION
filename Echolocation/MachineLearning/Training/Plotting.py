@@ -21,7 +21,7 @@ def plot_worker(queue, worker_id):
             break
         try:
             task_type, data = task
-            i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder, best_threshold, chosen_dataset = data
+            i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder, best_threshold, chosen_dataset, id = data
 
             fig, ax = plt.subplots(figsize=(8, 8) if task_type == 'cartesian' else (10, 6), dpi=DPI)
             if task_type == 'cartesian':
@@ -55,7 +55,7 @@ def plot_worker(queue, worker_id):
                 ax.set_aspect('equal')
                 ax.set_xlabel("X (m)")
                 ax.set_ylabel("Y (m)")
-                ax.set_title(f"{chosen_dataset}-{i}")
+                ax.set_title(f"{id}")
                 ax.grid(True)
                 ax.legend()
             elif task_type == 'scan_index':
@@ -70,7 +70,7 @@ def plot_worker(queue, worker_id):
                 ax.scatter(np.arange(len(Y_pred_i))[classified_as_no_object], Y_pred_i[classified_as_no_object], color='orange', marker='o', s=50, label='Not Object')
                 ax.set_xlabel("Scan Index")
                 ax.set_ylabel("Distance (m)")
-                ax.set_title(f"{chosen_dataset}-{i} \n Epochs: {num_epochs}, Layers: {num_layers}")
+                ax.set_title(f"{id}")
                 ax.grid(True)
                 ax.legend()
 
@@ -78,14 +78,14 @@ def plot_worker(queue, worker_id):
                 raise ValueError(f"Invalid task type: {task_type}")
 
             #plot_type = 'cartesian' if task_type == 'cartesian' else 'scan_index'
-            filename = f"prediction_{task_type}_{i}.png"
+            filename = f"prediction_{task_type}_{id}.png"
             fig.savefig(os.path.join(lidar_plots_folder, filename), bbox_inches='tight', dpi=DPI)
             plt.close(fig)
 
         except Exception as e:
             print(f"Error in worker {worker_id} for task {i}: {e}")
 
-def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_distances_test, num_epochs, num_layers, cartesian_folder, scan_index_folder, best_threshold, chosen_dataset):
+def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_distances_test, num_epochs, num_layers, cartesian_folder, scan_index_folder, best_threshold, chosen_dataset, ids):
     start_time = time.time()
     num_workers = int(cpu_count())
     print(f"Using {num_workers} multiprocessing workers for plotting")
@@ -96,8 +96,8 @@ def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_dis
         w.start()
 
     for i in range(len(Y_true)):
-        task_queue.put(('cartesian', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, cartesian_folder, best_threshold, chosen_dataset)))
-        task_queue.put(('scan_index', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, scan_index_folder, best_threshold, chosen_dataset)))
+        task_queue.put(('cartesian', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, cartesian_folder, best_threshold, chosen_dataset, ids[i])))
+        task_queue.put(('scan_index', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, scan_index_folder, best_threshold, chosen_dataset, ids[i])))
 
     for _ in range(num_workers):
         task_queue.put(None)
