@@ -49,8 +49,8 @@ def plot_worker(queue, worker_id):
 
                 classified_as_object = classifications_i > best_threshold
                 classified_as_no_object = ~classified_as_object
-                ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=30, label='Object')
-                ax.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange', marker='o', s=30, label='Not Object')
+                ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=30, label='Object', zorder=5)
+                ax.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange', marker='o', s=30, label='Not Object', zorder=5)
 
                 ax.set_aspect('equal')
                 ax.set_xlabel("X (m)")

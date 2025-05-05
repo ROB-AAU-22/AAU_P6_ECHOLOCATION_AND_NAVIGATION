@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, DISTANCE_THRESHOLD_ENABLED
 
 
-def build_dataset_from_csv(csv_file, dataset_root):
+def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_THRESHOLD):
     """
         Build a dataset for ML using normalized audio features from a CSV file and LiDAR scans from dataset_2 structure.
 
@@ -96,7 +96,7 @@ def build_dataset_from_csv(csv_file, dataset_root):
             original_distances.append(lidar_vector.copy())
             # Apply distance threshold, replacing values above it with NaN
             if DISTANCE_THRESHOLD_ENABLED:
-                lidar_vector[lidar_vector > DISTANCE_THRESHOLD] = np.nan
+                lidar_vector[lidar_vector > distance_threshold] = np.nan
 
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
