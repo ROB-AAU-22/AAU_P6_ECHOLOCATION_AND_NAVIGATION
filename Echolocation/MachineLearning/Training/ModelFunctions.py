@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD_ENABLED
+from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD_ENABLED
 
 class MaskedMSELoss(nn.Module):
     def __init__(self):

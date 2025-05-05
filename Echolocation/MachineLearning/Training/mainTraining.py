@@ -9,13 +9,13 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-from Echolocation.MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, \
+from MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, \
     NUM_LAYERS_LIST, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD
-from Echolocation.MachineLearning.Training.DataHandler import build_dataset_from_csv
-from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor, Regressor, Classifier
-from Echolocation.MachineLearning.Training.ModelTraining import compute_error_metrics, train_regressor, evaluate_regressor, ClassifierDataset, train_classifier, evaluate_classifier
-from Echolocation.MachineLearning.Training.Plotting import start_multiprocessing_plotting
-from Echolocation.MachineLearning.Training.EvaluationPlots import plot_precision_recall_curve, plot_confusion_matrix_all, plot_roc_curve
+from MachineLearning.Training.DataHandler import build_dataset_from_csv
+from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor, Regressor, Classifier
+from MachineLearning.Training.ModelTraining import compute_error_metrics, train_regressor, evaluate_regressor, ClassifierDataset, train_classifier, evaluate_classifier
+from MachineLearning.Training.Plotting import start_multiprocessing_plotting
+from MachineLearning.Training.EvaluationPlots import plot_precision_recall_curve, plot_confusion_matrix_all, plot_roc_curve
 
 
 def model_training(dataset_root_directory, chosen_dataset):

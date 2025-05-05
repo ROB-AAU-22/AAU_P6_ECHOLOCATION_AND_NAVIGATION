@@ -4,7 +4,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Process, Queue, cpu_count
-from Echolocation.MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, PLOT_DPI
+from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, PLOT_DPI
 DPI = PLOT_DPI
 
 def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):

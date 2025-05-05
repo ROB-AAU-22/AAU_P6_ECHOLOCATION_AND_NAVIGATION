@@ -4,8 +4,8 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from Echolocation.MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
-from Echolocation.MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
+from MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
+from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 
 # ---------------------------
