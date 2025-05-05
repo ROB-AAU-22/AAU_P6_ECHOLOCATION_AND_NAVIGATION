@@ -20,37 +20,26 @@ from sklearn.model_selection import train_test_split
 class MLPRegressor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
         """
-            A simple feedforward neural network for regression and classification.
-
-            Parameters:
-              - input_dim: number of input features.
-              - hidden_dim: size of the hidden layer.
-              - output_dim: dimensionality of the target (LiDAR scan length).
-              - num_layers: number of hidden layers (default=2).
+        A simple feedforward neural network for regression.
+        
+        Parameters:
+          - input_dim: number of input features.
+          - hidden_dim: size of the hidden layer.
+          - output_dim: dimensionality of the target (LiDAR scan length).
+          - num_layers: number of hidden layers (default=2).
         """
         super(MLPRegressor, self).__init__()
         layers = []
-        # Add the first hidden layer
         layers.append(nn.Linear(input_dim, hidden_dim))
         layers.append(nn.ReLU())
-        # Add additional hidden layers based on num_layers
         for i in range(num_layers - 1):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.ReLU())
-        # Define the regression head
-        self.regression_head = nn.Sequential(*layers, nn.Linear(hidden_dim, output_dim))
-        # Define the classification head with sigmoid activation for probabilities
-        self.classification_head = nn.Sequential(nn.Linear(hidden_dim, output_dim), nn.Sigmoid())
-
+        layers.append(nn.Linear(hidden_dim, output_dim))
+        self.model = nn.Sequential(*layers)
+        
     def forward(self, x):
-        # Pass input through the shared regression layers excluding the last layer
-        shared = self.regression_head[:-1](x)
-        # Compute regression output using the final layer of regression head
-        regression_output = self.regression_head[-1](shared)
-        # Compute classification output
-        classification_output = self.classification_head(shared)
-        # Return both regression and classification outputs
-        return regression_output, classification_output
+        return self.model(x)
 
 class AudioLidarDataset(Dataset):
     def __init__(self, X, Y):
@@ -66,105 +55,72 @@ class AudioLidarDataset(Dataset):
     def __getitem__(self, index):
         return self.X[index], self.Y[index]
 
-def load_model(epochs, layers):
-    model_file = os.path.join("Echolocation/Models", f"echolocation-wide-long-all_{epochs}_{layers}_model.pth")
-    model_checkpoint = torch.load(model_file)
+def load_model(model_path):
+    """ Load the trained model from a path. Epochs and layers are used to construct the file name. """
+    print(f"Loading model from {model_path}")
+    model_checkpoint = torch.load(model_path)
     
     hyperparams = model_checkpoint['hyperparameters']
     input_dim = hyperparams['input_dim']
     output_dim = hyperparams['output_dim']
     hidden_size = hyperparams['hidden_size']
+    hidden_layer_count = hyperparams['num_layers']
     
-    model = MLPRegressor(input_dim, hidden_size, output_dim, layers)
+    model = MLPRegressor(input_dim, hidden_size, output_dim, hidden_layer_count)
     model.load_state_dict(model_checkpoint['model_state_dict'])
     
     return model, hyperparams
 
-def load_data(file_path, dataset_root):
-    df = pd.read_csv(file_path)
-    df.sort_values("filename", inplace=True)
-    
-    X_list = []
-    Y_list = []
-    sample_ids = []
-    feature_names_full = []
-    
-    feature_cols = [col for col in df.columns if col != "filename"]
-    
-    for idx, row in df.iterrows():
-        filename = row["filename"]
-        try:
-            # Extract timestamp (e.g., 1744104210) from the filename
-            timestamp = filename.split('_')[0]
-        except Exception as e:
-            print(f"Error parsing timestamp from filename '{filename}': {e}. Skipping row.")
-            continue
+def predict_single_input(model, input_tensor):
+    """
+    Predict the output for a single input tensor using the trained model.
 
-        feature_vector = []
-        feature_names_row = []
-        for col in feature_cols:
-            cell = row[col]
-            if isinstance(cell, str) and cell.strip().startswith('[') and cell.strip().endswith(']'):
-                try:
-                    parsed_value = ast.literal_eval(cell)
-                    if isinstance(parsed_value, list):
-                        feature_vector.extend([float(x) for x in parsed_value])
-                        feature_names_row.extend([f"{col}_{i}" for i in range(len(parsed_value))])
-                    else:
-                        feature_vector.append(float(parsed_value))
-                        feature_names_row.append(col)
-                except Exception as e:
-                    print(f"Error parsing column '{col}' with value '{cell}': {e}")
-                    continue
-            else:
-                try:
-                    feature_vector.append(float(cell))
-                    feature_names_row.append(col)
-                except Exception as e:
-                    print(f"Error converting cell in column '{col}' with value '{cell}' to float: {e}")
-                    continue
+    Parameters:
+        model (torch.nn.Module): The trained PyTorch model.
+        input_tensor (torch.Tensor): A single input tensor (1D or 2D).
 
-        if idx == 0:
-            feature_names_full = feature_names_row
-
-        lidar_file = os.path.join(dataset_root, timestamp, f"{timestamp}_distance_data.json")
-        if not os.path.exists(lidar_file):
-            print(f"LiDAR file {lidar_file} not found. Skipping sample {timestamp}.")
-            continue
-        try:
-            with open(lidar_file, "r") as f:
-                lidar_data = json.load(f)
-            lidar_vector = np.array(lidar_data["LiDAR_distance"], dtype=float)
-        except Exception as e:
-            print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {timestamp}.")
-            continue
-
-        X_list.append(feature_vector)
-        Y_list.append(lidar_vector)
-        sample_ids.append(timestamp)
-
-    X = np.array(X_list)
-    Y = np.array(Y_list)
-    return X, Y, sample_ids, feature_names_full
-
-def predict_model(model, data_loader, device):
+    Returns:
+        np.ndarray: The predicted output as a NumPy array.
+    """
+    # Ensure the model is on the correct device
+    device = next(model.parameters()).device
     model.eval()
-    test_losses = []
-    all_predictions = []
-    all_targets = []
+
+    # Move the input tensor to the same device as the model
+    input_tensor = input_tensor.to(device)
+
+    # Add a batch dimension if the input tensor is 1D
+    if input_tensor.ndim == 1:
+        input_tensor = input_tensor.unsqueeze(0)
+
     with torch.no_grad():
-        for X_batch, Y_batch in data_loader:
-            X_batch = X_batch.to(device)
-            Y_batch = Y_batch.to(device)
-            outputs = model(X_batch)
-            #loss = nn.MSELoss(outputs, Y_batch)
-            #test_losses.append(loss.item())
-            all_predictions.append(outputs.cpu().numpy())
-            all_targets.append(Y_batch.cpu().numpy())
-    avg_loss = np.mean(test_losses)
-    all_predictions = np.concatenate(all_predictions, axis=0)
-    all_targets = np.concatenate(all_targets, axis=0)
-    return avg_loss, all_predictions, all_targets
+        # Perform the prediction
+        output = model(input_tensor)
+
+    # Convert the output to a NumPy array and return
+    return output.cpu()
+
+def load_single_row_from_csv(csv_path, row_index):
+    """
+    Load a single row from a CSV file and return its values as a list.
+
+    Parameters:
+        csv_path (str): Path to the CSV file.
+        row_index (int): Index of the row to load (0-based).
+
+    Returns:
+        list: The selected row's values as a list.
+    """
+    # Load the CSV file
+    data = pd.read_csv(csv_path)
+    
+    # Check if the row index is valid
+    if row_index < 0 or row_index >= len(data):
+        raise IndexError(f"Row index {row_index} is out of bounds for the CSV file with {len(data)} rows.")
+    
+    # Extract the specified row and convert it to a list
+    row_values = data.iloc[row_index].tolist()
+    return row_values
 
 def main():
     dataset_csv = os.path.join("Extracted features", "features_all_normalized.csv")
@@ -211,4 +167,28 @@ def main():
         print(f"LiDAR prediction plot saved to {lidar_plot_file}")
 
 if __name__ == '__main__':
-    main()
+    model_lidar, hyperparams_lidar = load_model(r"Echolocation\Models\echolocation-wide-long-all_200_2_model_regressor.pth")
+    model_classifier, hyperparams_classifier = load_model(r"Echolocation\Models\echolocation-wide-long-all_200_model_classifier.pth")
+    input_features = load_single_row_from_csv(r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\features_all_normalized.csv", 1)
+    input_features.pop(0)  # Remove the first element (sample ID)
+
+    input_tensor = torch.tensor(input_features, dtype=torch.float64)
+    print(f"Input tensor: {input_tensor}")
+    print(f"Input tensor shape: {input_tensor.shape}")
+
+    predictions = predict_single_input(model_lidar, input_tensor)
+    predictions_classefied = predict_single_input(model_classifier, predictions)
+    print(f"Predicted output: {predictions}")
+    predicrions_classefied = predictions_classefied.numpy()
+
+    # Plot the predictions
+    plt.figure(figsize=(10, 6))
+    plt.plot(predictions_classefied[0], label="Predicted Output", marker="o")
+    plt.xlabel("Index")
+    plt.ylabel("Value")
+    plt.title("Predicted Output Visualization")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    
