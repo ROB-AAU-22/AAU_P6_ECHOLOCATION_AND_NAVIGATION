@@ -9,8 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-from MachineLearning.Training.TrainingConfig import LEARNING_RATES, HIDDEN_SIZES, BATCH_SIZES, NUM_EPOCHS, \
-    NUM_LAYERS_LIST, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD, DISTANCE_THRESHOLDS
+from MachineLearning.Training.TrainingConfig import NUM_EPOCHS, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD, DISTANCE_THRESHOLDS, REGRESSOR_LEARNING_RATES, REGRESSOR_HIDDEN_SIZES, REGRESSOR_BATCH_SIZES, REGRESSOR_NUM_LAYERS_LIST, REGRESSOR_WEIGHT_DECAYS, REGRESSOR_LAYER_TYPE, CLASSIFIER_LEARNING_RATES, CLASSIFIER_HIDDEN_SIZES, CLASSIFIER_BATCH_SIZES, CLASSIFIER_NUM_LAYERS_LIST, CLASSIFIER_WEIGHT_DECAYS, CLASSIFIER_LAYER_TYPE
 from MachineLearning.Training.DataHandler import build_dataset_from_csv, ClassifierDataset
 from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor, Regressor, Classifier
 from MachineLearning.Training.ModelTraining import compute_error_metrics, train_regressor, evaluate_regressor, train_classifier, evaluate_classifier
@@ -23,8 +22,14 @@ def model_training(dataset_root_directory, chosen_dataset):
                             "features_all_normalized.csv")
 
     time_stamp = time.strftime("%d-%m_%H-%M-%S")
+    # add mm-dd-hh:mm:ss to dataset
+    dataset_iter = chosen_dataset + "_" + time_stamp
+    
     for distance in DISTANCE_THRESHOLDS:
         distance_folder = f"{distance}m_threshold"
+        distance_path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset,  dataset_iter,
+                                      distance_folder, "evaluation_metrics")
+        os.makedirs(distance_path, exist_ok=True)
         X, Y, sample_ids, feature_names_full, original_distances = build_dataset_from_csv(csv_file, dataset_root_directory, distance)
         if X.shape[0] == 0:
             print("No valid samples found. Exiting.")
@@ -64,66 +69,87 @@ def model_training(dataset_root_directory, chosen_dataset):
         # Define the global custom loss function
         regression_loss_fn = MaskedMSELoss()
         classification_loss_fn = nn.BCELoss()
+        
+
 
         # Grid search over regression hyperparameters
-        for lr in LEARNING_RATES:
-            for hidden_size in HIDDEN_SIZES:
-                for batch_size in BATCH_SIZES:
-                    for num_layers in NUM_LAYERS_LIST:
-                        print(
-                            f"\nTraining Regressor: lr={lr}, hidden={hidden_size}, batch={batch_size}, layers={num_layers}")
+        for lr in REGRESSOR_LEARNING_RATES:
+            for hidden_size in REGRESSOR_HIDDEN_SIZES:
+                for batch_size in REGRESSOR_BATCH_SIZES:
+                    for num_layers in REGRESSOR_NUM_LAYERS_LIST:
+                        for decay in REGRESSOR_WEIGHT_DECAYS:
+                            for layer_type in REGRESSOR_LAYER_TYPE:
 
-                        # Initialize model and optimizer
-                        regressor = Regressor(input_dim, hidden_size, output_dim, num_layers=num_layers).to(
-                            device)
-                        optimizer_r = optim.Adam(regressor.parameters(), lr=lr, weight_decay=1e-4)
+                                print(
+                                    f"\nTraining Regressor: hidden={hidden_size}, batch={batch_size}, layers={num_layers}, type={layer_type}, decay={decay}")
 
-                        # scheduler
-                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_r, mode='min', factor=0.1, patience=5)
+                                # Initialize model and optimizer
+                                regressor = Regressor(input_dim, hidden_size, output_dim, num_layers=num_layers, layer_type=layer_type).to(
+                                    device)
+                                optimizer_r = optim.Adam(regressor.parameters(), lr=lr, weight_decay=decay)
 
-                        # Train regressor
-                        regressor, avg_val_loss, preds_train_list, preds_val_list, targets_train_list, targets_val_list = train_regressor(
-                            regressor,
-                            DataLoader(train_dataset, batch_size=batch_size, shuffle=True),
-                            DataLoader(val_dataset, batch_size=batch_size, shuffle=False),
-                            optimizer_r,
-                            regression_loss_fn,
-                            device,
-                            NUM_EPOCHS,
-                            scheduler
-                        )
+                                # scheduler
+                                scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_r, mode='min', factor=0.1, patience=5)
 
-                        print(f"Val Accuracy: {avg_val_loss:.4f}")
+                                # Train regressor
+                                regressor, avg_val_loss, preds_train_list, preds_val_list, targets_train_list, targets_val_list = train_regressor(
+                                    regressor,
+                                    DataLoader(train_dataset, batch_size=batch_size, shuffle=True),
+                                    DataLoader(val_dataset, batch_size=batch_size, shuffle=False),
+                                    optimizer_r,
+                                    regression_loss_fn,
+                                    device,
+                                    NUM_EPOCHS,
+                                    scheduler
+                                )
 
-                        if avg_val_loss < best_regressor_val_loss:
-                            print("New best regressor model found.")
-                            best_regressor_val_loss = avg_val_loss
-                            best_regressor_hyperparams = {
-                                "input_dim": input_dim,
-                                "output_dim": output_dim,
-                                "lr": lr,
-                                "hidden_size": hidden_size,
-                                "batch_size": batch_size,
-                                "num_epochs": NUM_EPOCHS,
-                                "num_layers": num_layers
-                            }
-                            best_regressor_state = regressor.state_dict()
-                            #best_regressor_train_preds = np.concatenate(preds_train_list, axis=0).flatten()
-                            #best_regressor_val_preds = np.concatenate(preds_val_list, axis=0).flatten()
-                            best_regressor_train_preds = preds_train_list
-                            best_regressor_val_preds = preds_val_list
-                            #best_regressor_train_targets = np.concatenate(targets_train_list, axis=0).flatten()
-                            #best_regressor_val_targets = np.concatenate(targets_val_list, axis=0).flatten()
-                            best_regressor_train_targets = targets_train_list
-                            best_regressor_val_targets = targets_val_list
-                            test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+                                print(f"Val Accuracy: {avg_val_loss:.4f}")
+                                regressor_hyperparams = {
+                                        "input_dim": input_dim,
+                                        "output_dim": output_dim,
+                                        "lr": lr,
+                                        "hidden_size": hidden_size,
+                                        "batch_size": batch_size,
+                                        "num_epochs": NUM_EPOCHS,
+                                        "num_layers": num_layers,
+                                        "layer_type": layer_type,
+                                        "weight_decay": decay
+                                    }
+                                if avg_val_loss < best_regressor_val_loss:
+                                    print("New best regressor model found.")
+                                    best_regressor_val_loss = avg_val_loss
+                                    best_regressor_hyperparams = regressor_hyperparams
+                                    best_regressor_state = regressor.state_dict()
+                                    #best_regressor_train_preds = np.concatenate(preds_train_list, axis=0).flatten()
+                                    #best_regressor_val_preds = np.concatenate(preds_val_list, axis=0).flatten()
+                                    best_regressor_train_preds = preds_train_list
+                                    best_regressor_val_preds = preds_val_list
+                                    #best_regressor_train_targets = np.concatenate(targets_train_list, axis=0).flatten()
+                                    #best_regressor_val_targets = np.concatenate(targets_val_list, axis=0).flatten()
+                                    best_regressor_train_targets = targets_train_list
+                                    best_regressor_val_targets = targets_val_list
+                                    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+                                
+                                regressor_info_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, distance_folder, "regressor_results.txt")
+                                regressor_info_text = (
+                                    f"Regressor Hyperparameters: {regressor_hyperparams}\n"
+                                    f"  Best Regressor Loss: {avg_val_loss:.4f}\n\n\n"
+                                )
+
+                                # Write or append to the file
+                                try:
+                                    with open(regressor_info_file, 'x') as f:
+                                        f.write(regressor_info_text)
+                                except FileExistsError:
+                                    with open(regressor_info_file, 'a') as f:
+                                        f.write("\n" + regressor_info_text)
 
         if best_regressor_hyperparams is None:
             print("Error: No valid regressor hyperparameters found during grid search.")
             return
         print("Best regressor hyperparams:", best_regressor_hyperparams)
         best_regressor = Regressor(best_regressor_hyperparams["input_dim"], best_regressor_hyperparams["hidden_size"], best_regressor_hyperparams["output_dim"],
-                                   num_layers=best_regressor_hyperparams["num_layers"]).to(device)
+                                   num_layers=best_regressor_hyperparams["num_layers"], layer_type=best_regressor_hyperparams["layer_type"]).to(device)
         best_regressor.load_state_dict(best_regressor_state)
 
 
@@ -136,52 +162,68 @@ def model_training(dataset_root_directory, chosen_dataset):
         classifier_dataset_val = ClassifierDataset(best_regressor_val_preds, best_regressor_val_targets)
 
         # Grid search over classification hyperparameters
-        for lr in LEARNING_RATES:
-            for hidden_size in HIDDEN_SIZES:
-                for batch_size in BATCH_SIZES:
-                    for num_layers in NUM_LAYERS_LIST:
+        for lr in CLASSIFIER_LEARNING_RATES:
+            for hidden_size in CLASSIFIER_HIDDEN_SIZES:
+                for batch_size in CLASSIFIER_BATCH_SIZES:
+                    for num_layers in CLASSIFIER_NUM_LAYERS_LIST:
+                        for decay in CLASSIFIER_WEIGHT_DECAYS:
+                            for layer_type in CLASSIFIER_LAYER_TYPE:
+                                classifier = Classifier(input_dim=output_dim, hidden_dim=hidden_size, output_dim=output_dim, num_layers=num_layers, layer_type=layer_type).to(device)
+                                optimizer_c = optim.Adam(classifier.parameters(), lr=lr, weight_decay=decay)
 
-                        classifier = Classifier(input_dim=output_dim, hidden_dim=hidden_size, output_dim=output_dim, num_layers=num_layers).to(device)
-                        optimizer_c = optim.Adam(classifier.parameters(), lr=lr, weight_decay=1e-4)
+                                print(
+                                    f"\nTraining Classifier: hidden={hidden_size}, batch={batch_size}, layers={num_layers}, type={layer_type}, decay={decay}")
 
-                        print(
-                            f"\nTraining Classifier: lr={lr}, hidden={hidden_size}, batch={batch_size}")
+                                scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_c, mode='min', factor=0.1,
+                                                                                    patience=5)
 
-                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_c, mode='min', factor=0.1,
-                                                                               patience=5)
+                                classifier, avg_val_loss = train_classifier(
+                                    classifier,
+                                    DataLoader(classifier_dataset_train, batch_size=batch_size, shuffle=True),
+                                    DataLoader(classifier_dataset_val, batch_size=batch_size, shuffle=False),
+                                    optimizer_c,
+                                    classification_loss_fn,
+                                    device,
+                                    NUM_EPOCHS,
+                                    scheduler
+                                )
 
-                        classifier, avg_val_loss = train_classifier(
-                            classifier,
-                            DataLoader(classifier_dataset_train, batch_size=batch_size, shuffle=True),
-                            DataLoader(classifier_dataset_val, batch_size=batch_size, shuffle=False),
-                            optimizer_c,
-                            classification_loss_fn,
-                            device,
-                            NUM_EPOCHS,
-                            scheduler
-                        )
+                                # Evaluate classifier performance on val set
+                                #y_val_preds, y_val_labels_flat = evaluate_classifier(
+                                #    classifier, classifier_loader_val, device, predicted_val, y_val_labels
+                                #)
+                                #val_classifier_accuracy = np.mean((y_val_preds > 0.5) == y_val_labels_flat)
 
-                        # Evaluate classifier performance on val set
-                        #y_val_preds, y_val_labels_flat = evaluate_classifier(
-                        #    classifier, classifier_loader_val, device, predicted_val, y_val_labels
-                        #)
-                        #val_classifier_accuracy = np.mean((y_val_preds > 0.5) == y_val_labels_flat)
+                                print(f"Val Accuracy: {avg_val_loss:.4f}")
+                                classifier_hyperparams = {
+                                        "input_dim": output_dim,
+                                        "output_dim": output_dim,
+                                        "lr": lr,
+                                        "hidden_size": hidden_size,
+                                        "batch_size": batch_size,
+                                        "num_epochs": NUM_EPOCHS,
+                                        "num_layers": num_layers,
+                                        "layer_type": layer_type,
+                                        "weight_decay": decay
+                                    }
+                                if avg_val_loss < best_classifier_val_loss:
+                                    print("New best classifier model found.")
+                                    best_classifier_val_loss = avg_val_loss
+                                    best_classifier_hyperparams = classifier_hyperparams
+                                    best_classifier_state = classifier.state_dict()
+                                classifier_info_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter,distance_folder, "classifier_results.txt")
+                                classifier_info_text = (
+                                    f"Classifier Hyperparameters: {classifier_hyperparams}\n"
+                                    f"  Best Regressor Loss: {avg_val_loss:.4f}\n\n\n"
+                                )
 
-                        print(f"Val Accuracy: {avg_val_loss:.4f}")
-
-                        if avg_val_loss < best_classifier_val_loss:
-                            print("New best classifier model found.")
-                            best_classifier_val_loss = avg_val_loss
-                            best_classifier_hyperparams = {
-                                "input_dim": output_dim,
-                                "output_dim": output_dim,
-                                "lr": lr,
-                                "hidden_size": hidden_size,
-                                "batch_size": batch_size,
-                                "num_epochs": NUM_EPOCHS,
-                                "num_layers": num_layers,
-                            }
-                            best_classifier_state = classifier.state_dict()
+                                # Write or append to the file
+                                try:
+                                    with open(classifier_info_file, 'x') as f:
+                                        f.write(classifier_info_text)
+                                except FileExistsError:
+                                    with open(classifier_info_file, 'a') as f:
+                                        f.write("\n" + classifier_info_text)
 
         if best_classifier_hyperparams == None:
             print("Error: No valid classifier hyperparameters found during grid search.")
@@ -194,7 +236,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         print(f"Best overall classifier loss: {best_classifier_val_loss:.4f}")
         # Build and load the best classifier model
         best_classifier = Classifier(input_dim=best_classifier_hyperparams["input_dim"], hidden_dim=best_classifier_hyperparams["hidden_size"], output_dim= best_classifier_hyperparams["output_dim"],
-                                   num_layers=best_classifier_hyperparams["num_layers"]).to(device)
+                                   num_layers=best_classifier_hyperparams["num_layers"], layer_type=best_classifier_hyperparams["layer_type"]).to(device)
         best_classifier.load_state_dict(best_classifier_state, strict=True)
 
         # Run regression on test set
@@ -203,29 +245,20 @@ def model_training(dataset_root_directory, chosen_dataset):
         )
 
         # Run classification on predicted distances
-        best_classifier.eval()
-        all_classifications = []
-        with torch.no_grad():
-            for i in range(0, predicted_test.shape[0], best_classifier_hyperparams["batch_size"]):
-                batch = predicted_test[i:i + best_classifier_hyperparams["batch_size"]].to(device)
-                outputs = best_classifier(batch).cpu().numpy()
-                all_classifications.append(outputs)
+        classifications, classifications_true, classifcation_list, classifcation_true_list = evaluate_classifier(best_classifier, device, predicted_test, ground_truth_test,best_classifier_hyperparams["batch_size"])
 
-        classifications = np.concatenate(all_classifications, axis=0)
-        Y_pred = predicted_test.numpy()
-        Y_true = ground_truth_test.numpy()
-
-        # add mm-dd-hh:mm:ss to dataset
-
-        dataset_iter = chosen_dataset + "_" + time_stamp
+        #classifcation_list = np.concatenate(classifcation_list)
 
         metrics_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset,  dataset_iter,
                                       distance_folder, "evaluation_metrics")
         os.makedirs(metrics_folder, exist_ok=True)
 
         # Compute binary labels for classification
-        y_class_targets = (Y_true <= distance).astype(int).flatten()
+        y_class_targets = classifications_true.flatten()
         y_class_probs = classifications.flatten()
+        
+        #print(f"y_class_targets: {y_class_targets}")
+        #print(f"y_class_probs: {y_class_probs}")
 
         threshold_to_use = CLASSIFICATION_THRESHOLDS[0]
 
@@ -243,12 +276,12 @@ def model_training(dataset_root_directory, chosen_dataset):
         mre_array = []
         range_metrics = []
 
-        for i in range(len(Y_true)):
+        for i in range(len(ground_truth_test)):
             # add all non nan numbers to array
-            mae_array.append(np.nanmean(np.abs(Y_true[i] - Y_pred[i])))
-            rmse_array.append(np.sqrt(np.nanmean((Y_true[i] - Y_pred[i]) ** 2)))
-            mre_array.append(np.nanmean(np.abs((Y_true[i] - Y_pred[i]) / (Y_true[i] + 1e-10))) if np.any(Y_true[i]) else 0)
-            range_metrics.append(compute_error_metrics(Y_true[i], Y_pred[i]))
+            mae_array.append(np.nanmean(np.abs(ground_truth_test.numpy()[i] - predicted_test.numpy()[i])))
+            rmse_array.append(np.sqrt(np.nanmean((ground_truth_test.numpy()[i] - predicted_test.numpy()[i]) ** 2)))
+            mre_array.append(np.nanmean(np.abs((ground_truth_test.numpy()[i] - predicted_test.numpy()[i]) / (ground_truth_test.numpy()[i] + 1e-10))) if np.any(ground_truth_test.numpy()[i]) else 0)
+            range_metrics.append(compute_error_metrics(ground_truth_test.numpy()[i], predicted_test.numpy()[i]))
 
         mean_absolute_error = np.nanmean(mae_array)
         root_mean_square_error = np.nanmean(rmse_array)
@@ -310,7 +343,7 @@ def model_training(dataset_root_directory, chosen_dataset):
 
         # Create and start workers
         start_multiprocessing_plotting(
-    Y_true, Y_pred, classifications, original_distances_test,
+    ground_truth_test, predicted_test, classifcation_list, original_distances_test,
     NUM_EPOCHS, best_regressor_hyperparams['num_layers'], cartesian_folder, scan_index_folder,
     CLASSIFICATION_THRESHOLDS, dataset_iter, sample_ids_test
 )
@@ -319,7 +352,7 @@ def model_training(dataset_root_directory, chosen_dataset):
         print(f"Best model saved to {model_file_regressor}")
 
         # Evaluate classification accuracy
-        classification_accuracy = ((classifications > best_threshold) == (Y_true <= distance)).mean()
+        classification_accuracy = ((classifications > best_threshold) == (classifications_true <= distance)).mean()
         print(f"Classification Accuracy: {classification_accuracy:.4f}")
         print("\nBest hyperparameters found:")
         print(best_classifier_hyperparams)

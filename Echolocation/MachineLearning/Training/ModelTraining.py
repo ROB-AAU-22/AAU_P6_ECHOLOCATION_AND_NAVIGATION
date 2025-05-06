@@ -11,54 +11,76 @@ from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_sco
 # ---------------------------
 # Training Functions
 # ---------------------------
+def train_one_epoch(model, train_loader, optimizer, loss_fn, device):
+    model.train()  # Set the model to training mode
+    train_losses = []  # List to store training losses for the epoch
+    preds_train_list = []  # List to store predictions for the training set
+    targets_train_list = []  # List to store true targets for the training set
 
+    # Iterate over the training data
+    for X_batch, Y_batch in train_loader:
+        # Move data to the specified device
+        X_batch, Y_batch = X_batch.to(device), Y_batch.to(device)
+
+        optimizer.zero_grad()  # Reset gradients
+        preds_train = model(X_batch)  # Forward pass
+        preds_train_list.append(preds_train.cpu().detach().numpy())  # Store predictions
+        targets_train_list.append(Y_batch.cpu().detach().numpy())  # Store true targets
+
+        loss = loss_fn(preds_train, Y_batch)  # Compute loss
+        loss.backward()  # Backward pass
+        optimizer.step()  # Update model parameters
+        train_losses.append(loss.item())  # Store the loss
+
+    # Compute average training loss for the epoch
+    avg_training_loss = np.mean(train_losses)
+    preds_train_list = np.concatenate(preds_train_list)  # Concatenate all training predictions
+    targets_train_list = np.concatenate(targets_train_list)  # Concatenate all training targets
+
+    return avg_training_loss, preds_train_list, targets_train_list
+
+
+def validate_one_epoch(model, val_loader, loss_fn, device):
+    model.eval()  # Set the model to evaluation mode
+    preds_val_list, targets_val_list = [], []  # Lists to store validation predictions and targets
+    val_loss = []  # List to store validation losses
+
+    with torch.no_grad():  # Disable gradient computation for validation
+        for X_batch, Y_batch in val_loader:
+            # Move data to the specified device
+            X_batch = X_batch.to(device)
+            preds_val = model(X_batch).cpu()  # Forward pass
+            preds_val_list.append(preds_val)  # Store predictions
+            targets_val_list.append(Y_batch)  # Store true targets
+            val_loss.append(loss_fn(preds_val, Y_batch).item())  # Compute and store loss
+
+    # Concatenate all validation predictions and targets
+    preds_val_list = np.concatenate(preds_val_list)
+    targets_val_list = np.concatenate(targets_val_list)
+
+    # Compute average validation loss for the epoch
+    avg_val_loss = np.mean(val_loss)
+
+    return avg_val_loss, preds_val_list, targets_val_list
 
 def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler=None, patience=PATIENCE):
+    # Move the model to the specified device (GPU or CPU)
     model.to(device)
-    best_loss = float("inf")
-    patience_counter = 0
+    best_loss = float("inf")  # Initialize the best loss to infinity
+    patience_counter = 0  # Counter for early stopping
 
     for epoch in range(epochs):
-        model.train()
-        train_losses = []
-        preds_train_list = []
-        targets_train_list = []
-        for X_batch, Y_batch in train_loader:
-            X_batch, Y_batch = X_batch.to(device), Y_batch.to(device)
+        # Training phase
+        avg_training_loss, preds_train_list, targets_train_list = train_one_epoch(
+            model, train_loader, optimizer, loss_fn, device
+        )
 
-            optimizer.zero_grad()
-            preds_train = model(X_batch)
-            #print(f"len preds_train: {len(preds_train.cpu().detach().numpy()[0])}")
-            preds_train_list.append(preds_train.cpu().detach().numpy())
+        # Validation phase
+        avg_val_loss, preds_val_list, targets_val_list = validate_one_epoch(
+            model, val_loader, loss_fn, device
+        )
 
-            targets_train_list.append(Y_batch.cpu().detach().numpy())
-
-            loss = loss_fn(preds_train, Y_batch)
-            loss.backward()
-            optimizer.step()
-            train_losses.append(loss.item())
-        avg_training_loss = np.mean(train_losses)
-        #print(f"lengtsss preds_train len: {len(np.concatenate(preds_train_list)[0])}")
-        preds_train_list = np.concatenate(preds_train_list)
-        targets_train_list = np.concatenate(targets_train_list)
-
-        # validation
-        model.eval()
-        preds_val_list, targets_val_list = [], []
-        val_loss = []
-        with torch.no_grad():
-            for X_batch, Y_batch in val_loader:
-                X_batch = X_batch.to(device)
-                preds_val = model(X_batch).cpu()
-                preds_val_list.append(preds_val)
-                targets_val_list.append(Y_batch)
-                val_loss.append(loss_fn(preds_val, Y_batch).item())
-        preds_val_list = np.concatenate(preds_val_list)
-        targets_val_list = np.concatenate(targets_val_list)
-
-        avg_val_loss = np.mean(val_loss)
         print(f"[Regressor] Epoch {epoch + 1}/{epochs}, Train Loss: {avg_training_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
-        combined_loss = avg_training_loss + avg_val_loss
 
         # Adjust the learning rate using the scheduler if provided
         if scheduler:
@@ -67,27 +89,20 @@ def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device,
 
         # Early stopping logic
         if avg_val_loss < best_loss:
-            best_loss = avg_val_loss
-            patience_counter = 0
+            best_loss = avg_val_loss  # Update the best loss
+            patience_counter = 0  # Reset the patience counter
         else:
-            patience_counter += 1
+            patience_counter += 1  # Increment the patience counter
             print(f"    No improvement. Patience counter: {patience_counter}/{patience}")
             if patience_counter >= patience:
-                print("Early stopping triggered.")
+                print("Early stopping triggered.")  # Stop training if patience is exceeded
                 break
 
     return model, avg_val_loss, preds_train_list, preds_val_list, targets_train_list, targets_val_list
 
-def evaluate_regressor(model, dataloader, device):
-    model.eval()
-    preds_list, targets_list = [], []
-    with torch.no_grad():
-        for X_batch, Y_batch in dataloader:
-            X_batch = X_batch.to(device)
-            preds = model(X_batch).cpu()
-            preds_list.append(preds)
-            targets_list.append(Y_batch)
-    return torch.cat(preds_list), torch.cat(targets_list)
+
+
+
 
 
 def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler, patience=PATIENCE):
@@ -158,23 +173,54 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
 
     return model, avg_val_loss
 
-def evaluate_classifier(model, classifier_loader_val, device,predicted_val, y_val_labels):
-    model.eval()
-    with torch.no_grad():
-        outputs = model(predicted_val.to(device)).cpu().numpy()
-    y_val_preds = outputs.flatten()
-    y_val_labels_flat = y_val_labels.flatten().numpy()
 
-    y_val_preds_thresholded = (y_val_preds > 0.5).astype(int)
+def evaluate_regressor(model, dataloader, device):
+    model.eval()
+    preds_list, targets_list = [], []
+    with torch.no_grad():
+        for X_batch, Y_batch in dataloader:
+            X_batch = X_batch.to(device)
+            preds = model(X_batch).cpu()
+            preds_list.append(preds)
+            targets_list.append(Y_batch)
+    return torch.cat(preds_list), torch.cat(targets_list)
+
+def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
+    model.eval()
+    #print(f"predicted_val: {predicted_val}")
+    #print(f"y_val_labels: {y_val_labels}")
+    data = [predicted_val, y_val_labels]
+    dataloader = DataLoader(data, batch_size, shuffle=False)
+    preds_list = []
+    targets_list = []
+    with torch.no_grad():
+        for Xb, Yb in dataloader:
+            Xb = Xb.to(device)
+            outputs = model(Xb).cpu()
+            preds_list.append(outputs)
+            targets_list.append(Yb)
+    y_val_preds = outputs.numpy()
+    y_val_labels_flat = ~np.isnan(y_val_labels.cpu().numpy())
+    y_val_labels_thresholded = (y_val_labels_flat).astype(int)
+
+    y_val_preds_thresholded = (y_val_preds>0.5).astype(int)
+    
+    #print(f"y_val_preds_thresholded: {y_val_preds_thresholded}")
+    #print(f"y_val_labels_thresholded: {y_val_labels_thresholded}")
+    # concenate all predictions and targets
+    y_val_preds_thresholded = np.concatenate(y_val_preds_thresholded)
+    y_val_labels_thresholded = np.concatenate(y_val_labels_thresholded)
+    #print(f"preds_list: {y_val_preds_thresholded}")
+    #print(f"targets_list: {y_val_labels_thresholded}")
     # Compute classification metrics
-    precision = precision_score(y_val_labels_flat, y_val_preds_thresholded, zero_division=0)
-    recall = recall_score(y_val_labels_flat, y_val_preds_thresholded, zero_division=0)
-    f1_classifier = f1_score(y_val_labels_flat, y_val_preds_thresholded, zero_division=0)
+    precision = precision_score(y_val_labels_thresholded, y_val_preds_thresholded, zero_division=0)
+    recall = recall_score(y_val_labels_thresholded, y_val_preds_thresholded, zero_division=0)
+    f1_classifier = f1_score(y_val_labels_thresholded, y_val_preds_thresholded, zero_division=0)
     print(
         f"  Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}\n"
     )
 
-    return y_val_preds, y_val_labels_flat
+    return y_val_preds_thresholded, y_val_labels_thresholded, torch.cat(preds_list).numpy(), torch.cat(targets_list)
 
 def compute_error_metrics(Y_true, Y_pred):
     range_bins = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
