@@ -9,7 +9,7 @@ from FeatureExtraction import FeatureExtractionScript
 from FeatureExtraction import NormalizeFeatures
 from MachineLearning.Training import mainTraining
 from Data import DownloadDataKaggle
-#from MachineLearning.ModelPredict import load_model_regressor as load_model_regressor
+from MachineLearning import ModelPredict
 
 
 def main():
@@ -69,9 +69,9 @@ def main():
 
     elif train_predict_input == "p" or str(train_predict_input) == "1":
         print("predict script")
-        #model, hyperparameters = load_model_regressor(200, 2)
-        #print("Model: \n", model)
-        #print("hyperparameters: \n", hyperparameters)
+        model, hyperparameters = ModelPredict.main_predict()
+        print("Model: \n", model)
+        print("hyperparameters: \n", hyperparameters)
     else:
         print("Invalid input. Please enter 'train' or 'predict'.")
         return
