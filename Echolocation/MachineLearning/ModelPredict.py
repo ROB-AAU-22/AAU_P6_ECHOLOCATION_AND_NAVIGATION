@@ -55,7 +55,20 @@ class AudioLidarDataset(Dataset):
     def __getitem__(self, index):
         return self.X[index], self.Y[index]
 
-def load_model(model_path):
+class Classifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
+        super().__init__()
+        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        for _ in range(num_layers - 1):
+            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+        layers.append(nn.Linear(hidden_dim, output_dim))
+        layers.append(nn.Sigmoid())
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.model(x)
+
+def load_model_regressor(model_path):
     """ Load the trained model from a path. Epochs and layers are used to construct the file name. """
     print(f"Loading model from {model_path}")
     model_checkpoint = torch.load(model_path)
@@ -67,6 +80,22 @@ def load_model(model_path):
     hidden_layer_count = hyperparams['num_layers']
     
     model = MLPRegressor(input_dim, hidden_size, output_dim, hidden_layer_count)
+    model.load_state_dict(model_checkpoint['model_state_dict'])
+    
+    return model, hyperparams
+
+def load_model_classifier(model_path):
+    """ Load the trained model from a path. Epochs and layers are used to construct the file name. """
+    print(f"Loading model from {model_path}")
+    model_checkpoint = torch.load(model_path)
+    
+    hyperparams = model_checkpoint['hyperparameters']
+    input_dim = hyperparams['input_dim']
+    output_dim = hyperparams['output_dim']
+    hidden_size = hyperparams['hidden_size']
+    hidden_layer_count = hyperparams['num_layers']
+    
+    model = Classifier(input_dim, hidden_size, output_dim, hidden_layer_count)
     model.load_state_dict(model_checkpoint['model_state_dict'])
     
     return model, hyperparams
@@ -167,12 +196,12 @@ def main():
         print(f"LiDAR prediction plot saved to {lidar_plot_file}")
 
 if __name__ == '__main__':
-    model_lidar, hyperparams_lidar = load_model(r"Echolocation\Models\echolocation-wide-long-all_200_2_model_regressor.pth")
-    model_classifier, hyperparams_classifier = load_model(r"Echolocation\Models\echolocation-wide-long-all_200_model_classifier.pth")
+    model_lidar, hyperparams_lidar = load_model_regressor(r"Echolocation\Models\echolocation-wide-long-all_200_2_model_regressor.pth")
+    model_classifier, hyperparams_classifier = load_model_classifier(r"Echolocation\Models\echolocation-wide-long-all_200_model_classifier.pth")
     input_features = load_single_row_from_csv(r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\features_all_normalized.csv", 1)
     input_features.pop(0)  # Remove the first element (sample ID)
 
-    input_tensor = torch.tensor(input_features, dtype=torch.float64)
+    input_tensor = torch.tensor(input_features, dtype=torch.float32)
     print(f"Input tensor: {input_tensor}")
     print(f"Input tensor shape: {input_tensor.shape}")
 
