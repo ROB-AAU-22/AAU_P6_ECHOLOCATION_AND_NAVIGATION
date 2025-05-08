@@ -11,7 +11,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_sco
 # ---------------------------
 # Training Functions
 # ---------------------------
-def train_one_epoch(model, train_loader, optimizer, loss_fn, device):
+def train_one_epoch_regressor(model, train_loader, optimizer, loss_fn, device):
     model.train()  # Set the model to training mode
     train_losses = []  # List to store training losses for the epoch
     preds_train_list = []  # List to store predictions for the training set
@@ -40,7 +40,7 @@ def train_one_epoch(model, train_loader, optimizer, loss_fn, device):
     return avg_training_loss, preds_train_list, targets_train_list
 
 
-def validate_one_epoch(model, val_loader, loss_fn, device):
+def validate_one_epoch_regressor(model, val_loader, loss_fn, device):
     model.eval()  # Set the model to evaluation mode
     preds_val_list, targets_val_list = [], []  # Lists to store validation predictions and targets
     val_loss = []  # List to store validation losses
@@ -71,12 +71,12 @@ def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device,
 
     for epoch in range(epochs):
         # Training phase
-        avg_training_loss, preds_train_list, targets_train_list = train_one_epoch(
+        avg_training_loss, preds_train_list, targets_train_list = train_one_epoch_regressor(
             model, train_loader, optimizer, loss_fn, device
         )
 
         # Validation phase
-        avg_val_loss, preds_val_list, targets_val_list = validate_one_epoch(
+        avg_val_loss, preds_val_list, targets_val_list = validate_one_epoch_regressor(
             model, val_loader, loss_fn, device
         )
 
@@ -105,50 +105,58 @@ def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device,
 
 
 
-def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler, patience=PATIENCE):
+def train_one_epoch_classifier(model, train_loader, optimizer, loss_fn, device):
     model.train()
+    train_loss = []
+    for Xb, Yb in train_loader:
+        Xb, Yb = Xb.to(device), Yb.to(device)
+        optimizer.zero_grad()
+        pred = model(Xb)
+        loss = loss_fn(pred, Yb)
+        loss.backward()
+        optimizer.step()
+        train_loss.append(loss.item())
+
+    avg_training_loss = np.mean(train_loss)
+    return avg_training_loss
+
+
+def validate_one_epoch_classifier(model, val_loader, loss_fn, device):
+    model.eval()
+    val_loss = []
+    val_preds, val_labels = [], []
+    with torch.no_grad():
+        for Xb, Yb in val_loader:
+            Xb = Xb.to(device)
+            pred = model(Xb).cpu()
+            val_preds.append(pred)
+            val_labels.append(Yb)
+            loss = loss_fn(pred, Yb)
+            val_loss.append(loss.item())
+
+    val_preds = np.concatenate(val_preds).flatten()
+    val_labels = np.concatenate(val_labels).flatten()
+    avg_val_loss = np.mean(val_loss)
+    return avg_val_loss, val_preds, val_labels
+
+
+def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler, patience=PATIENCE):
     best_loss = float("inf")
     patience_counter = 0
 
     for epoch in range(epochs):  # run for specified epochs
-        train_loss = []
-        for Xb, Yb in train_loader:
-            Xb, Yb = Xb.to(device), Yb.to(device)
-            optimizer.zero_grad()
-            pred = model(Xb)
-            loss = loss_fn(pred, Yb)
-            loss.backward()
-            optimizer.step()
-            train_loss.append(loss.item())
+        # Training phase
+        avg_training_loss = train_one_epoch_classifier(model, train_loader, optimizer, loss_fn, device)
 
-        avg_training_loss = np.mean(train_loss)
+        # Validation phase
+        avg_val_loss, val_preds, val_labels = validate_one_epoch_classifier(model, val_loader, loss_fn, device)
 
-        # validation
-        model.eval()
-        val_loss = []
-        val_preds, val_labels = [], []
-        with torch.no_grad():
-            for Xb, Yb in val_loader:
-                Xb = Xb.to(device)
-                pred = model(Xb).cpu()
-                val_preds.append(pred)
-                val_labels.append(Yb)
-                loss = loss_fn(pred, Yb)
-                val_loss.append(loss.item())
-        val_preds = np.concatenate(val_preds).flatten()
-        val_labels = np.concatenate(val_labels).flatten()
-        avg_val_loss = np.mean(val_loss)
-        avg_loss = avg_training_loss + avg_val_loss
-        
         classification_accuracy = ((val_preds > 0.5) == (val_labels)).mean()
 
         print(
             f"[Classifier] Epoch {epoch + 1}/{epochs}, Train Loss: {avg_training_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Classification Accuracy: {classification_accuracy:.4f}")
 
-        #print(f"val preds: {val_preds}")
-        #print(f"val labels: {val_labels}")
         y_val_preds_thresholded = (val_preds > 0.5).astype(int)
-        #print(f"y_val_preds_thresholded: {y_val_preds_thresholded}")
         # Compute classification metrics
         precision = precision_score(val_labels, y_val_preds_thresholded, zero_division=0)
         recall = recall_score(val_labels, y_val_preds_thresholded, zero_division=0)
@@ -156,6 +164,7 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
         print(
             f"  Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}"
         )
+
         # Adjust the learning rate using the scheduler if provided
         if scheduler:
             scheduler.step(avg_val_loss)
