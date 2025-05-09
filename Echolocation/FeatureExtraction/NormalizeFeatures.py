@@ -58,19 +58,18 @@ def normalize_single_feature_vector(feature_vector, mean_std_csv):
     
     # Create a dictionary for quick lookup of mean and std values
     mean_std_dict = dict(zip(mean_std_df["Feature"], zip(mean_std_df["Mean"], mean_std_df["Std"])))
+    mean_std_list = list(mean_std_dict.values())
+    print(f"Mean and std dictionary: {mean_std_list}")
     
     # Normalize the feature vector
     normalized_vector = []
     for i, value in enumerate(feature_vector):
-        feature_name = f"feature_{i}"  # Assuming features are named as "feature_0", "feature_1", etc.
-        if feature_name in mean_std_dict:
-            mean, std = mean_std_dict[feature_name]
-            if std != 0:
-                normalized_value = (value - mean) / std
-            else:
-                normalized_value = 0.0  # If std is zero, set normalized value to 0
-            normalized_vector.append(normalized_value)
+        mean = mean_std_list[i][0]
+        std = mean_std_list[i][1]
+        if std != 0:
+            normalized_value = (value - mean) / std
         else:
-            normalized_vector.append(value)  # If feature not found, keep original value
+            normalized_value = 0.0
+        normalized_vector.append(normalized_value)
     
     return normalized_vector

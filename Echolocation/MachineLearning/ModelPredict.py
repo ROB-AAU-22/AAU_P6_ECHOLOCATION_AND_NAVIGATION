@@ -201,14 +201,14 @@ def main_predict():
     model_lidar, hyperparams_lidar = load_model_regressor(r"Echolocation\Models\2.0m_threshold\echolocation-wide-long-all_200_2_model_regressor.pth")
     model_classifier, hyperparams_classifier = load_model_classifier(r"Echolocation\Models\2.0m_threshold\echolocation-wide-long-all_200_model_classifier.pth")
     input_features = load_single_row_from_csv(r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\features_all_normalized.csv", 96)
-    features = FeatureExtractionScript.exstract_single_features_from_wav(r"Echolocation/Data/dataset/echolocation-wide-long-all/1744892544_2_Wide_Long/1744892544_2_Wide_Long_sound.wav")
+    features = list(FeatureExtractionScript.exstract_single_features_from_wav(r"Echolocation\Data\dataset\echolocation-wide-long-all\1744896231_104_Wide_Long\1744896231_104_Wide_Long_sound.wav").values())
     print(f"Extracted features: {features}")
     print(f"length of features: {len(features)}")
     features = NormalizeFeatures.normalize_single_feature_vector(features, r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\mean_std.csv")
     print(f"Normalized features: {features}")
     print(input_features.pop(0))  # Remove the first element (sample ID)
 
-    input_tensor = torch.tensor(input_features, dtype=torch.float32)
+    input_tensor = torch.tensor(features, dtype=torch.float32)
     print(f"Input tensor: {input_tensor}")
     print(f"Input tensor shape: {input_tensor.shape}")
 
@@ -219,7 +219,7 @@ def main_predict():
     predictions = predictions.numpy()
     # Plot the predictions
     plt.figure(figsize=(10, 6))
-    plt.plot(predictions[0], label="Predicted Output", marker="o")
+    plt.plot(predicrions_classefied[0], label="Predicted Output", marker="o")
     plt.xlabel("Index")
     plt.ylabel("Value")
     plt.title("Predicted Output Visualization")

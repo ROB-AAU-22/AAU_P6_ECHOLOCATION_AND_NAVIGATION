@@ -240,6 +240,8 @@ def exstract_single_features_from_wav(wav_file_path):
             if stereo_signal.ndim != 2 and stereo_signal.shape[1] < 2:
                 raise ValueError("Input audio file is not stereo.")
             
+            stereo_signal = cut_sound_file(stereo_signal, sr, before_threshold=0.005, after_threshold=0.3)
+            
             left_ch, right_ch = stereo_signal[:, 0], stereo_signal[:, 1]
 
             folder_features.update({
