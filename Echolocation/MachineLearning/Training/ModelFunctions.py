@@ -77,11 +77,31 @@ class MLPRegressor(nn.Module):
 
 
 class Regressor(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, layer_type):
+        """
+            A simple feedforward neural network for regression.
+
+            Parameters:
+              - input_dim: number of input features.
+              - hidden_dim: size of the hidden layer.
+              - output_dim: dimensionality of the target (LiDAR scan length).
+              - num_layers: number of hidden layers (default=2).
+        """
         super().__init__()
-        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        if layer_type == "Tanh":
+            layers = [nn.Linear(input_dim, hidden_dim), nn.Tanh()]
+        elif layer_type == "Sigmoid":
+            layers = [nn.Linear(input_dim, hidden_dim), nn.Sigmoid()]
+        else:
+            layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+             
         for _ in range(num_layers - 1):
-            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+            if layer_type == "Tanh":
+                layers += [nn.Linear(hidden_dim, hidden_dim), nn.Tanh()]
+            elif layer_type == "Sigmoid":
+                layers += [nn.Linear(hidden_dim, hidden_dim), nn.Sigmoid()]
+            else:
+                layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
         layers.append(nn.Linear(hidden_dim, output_dim))
         self.model = nn.Sequential(*layers)
 
@@ -89,11 +109,22 @@ class Regressor(nn.Module):
         return self.model(x)
 
 class Classifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, layer_type):
         super().__init__()
-        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        if layer_type == "Tanh":
+            layers = [nn.Linear(input_dim, hidden_dim), nn.Tanh()]
+        elif layer_type == "Sigmoid":
+            layers = [nn.Linear(input_dim, hidden_dim), nn.Sigmoid()]
+        else:
+            layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+             
         for _ in range(num_layers - 1):
-            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+            if layer_type == "Tanh":
+                layers += [nn.Linear(hidden_dim, hidden_dim), nn.Tanh()]
+            elif layer_type == "Sigmoid":
+                layers += [nn.Linear(hidden_dim, hidden_dim), nn.Sigmoid()]
+            else:
+                layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
         layers.append(nn.Linear(hidden_dim, output_dim))
         layers.append(nn.Sigmoid())
         self.model = nn.Sequential(*layers)

@@ -12,6 +12,8 @@ from MachineLearning.Training.TrainingConfig import PLOT_DPI
 DPI = PLOT_DPI
 
 def plot_precision_recall_curve(y_true, y_probs, save_path=None):
+    #print(f"y_true: {y_true}")
+    #print(f"y_probs: {y_probs}")
     precision, recall, _ = precision_recall_curve(y_true, y_probs)
     plt.figure(figsize=(8, 6), dpi=DPI)
     plt.plot(recall, precision, label="Precision-Recall Curve", color="blue")

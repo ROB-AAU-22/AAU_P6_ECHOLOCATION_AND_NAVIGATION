@@ -25,7 +25,7 @@ def plot_worker(queue, worker_id):
 
             fig, ax = plt.subplots(figsize=(8, 8) if task_type == 'cartesian' else (10, 6), dpi=DPI)
             if task_type == 'cartesian':
-                print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
+                #print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
                 gt_x, gt_y = polar_to_cartesian(Y_true_i)
                 pred_x, pred_y = polar_to_cartesian(Y_pred_i)
                 ignored_gt = original_gt_i > DISTANCE_THRESHOLD
@@ -46,10 +46,10 @@ def plot_worker(queue, worker_id):
                 # draw an arrow vector from origin to middle point(s)
                 plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
                 plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
-
+                #print(f"Classifications_i: {classifications_i}")
                 classified_as_object = classifications_i > best_threshold
                 classified_as_no_object = ~classified_as_object
-                ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=30, label='Object', zorder=5)
+                ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=30, label='Object', zorder=6)
                 ax.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange', marker='o', s=30, label='Not Object', zorder=5)
 
                 ax.set_aspect('equal')
@@ -59,7 +59,7 @@ def plot_worker(queue, worker_id):
                 ax.grid(True)
                 ax.legend()
             elif task_type == 'scan_index':
-                print(f"Worker {worker_id} plotting scan index LiDAR for sample {i}...")
+                #print(f"Worker {worker_id} plotting scan index LiDAR for sample {i}...")
                 ax.plot(Y_true_i, label="Ground Truth LiDAR", marker="o")
                 #ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
                 ignored_gt = original_gt_i > DISTANCE_THRESHOLD
@@ -84,6 +84,7 @@ def plot_worker(queue, worker_id):
 
         except Exception as e:
             print(f"Error in worker {worker_id} for task {i}: {e}")
+            raise e
 
 def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_distances_test, num_epochs, num_layers, cartesian_folder, scan_index_folder, best_threshold, chosen_dataset, ids):
     start_time = time.time()
