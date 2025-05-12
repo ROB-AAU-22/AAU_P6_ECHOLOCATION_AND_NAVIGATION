@@ -219,7 +219,7 @@ def main_predict():
     predictions = predictions.numpy()
     # Plot the predictions
     plt.figure(figsize=(10, 6))
-    plt.plot(predicrions_classefied[0], label="Predicted Output", marker="o")
+    plt.plot(predictions[0], label="Predicted Output", marker="o")
     plt.xlabel("Index")
     plt.ylabel("Value")
     plt.title("Predicted Output Visualization")
