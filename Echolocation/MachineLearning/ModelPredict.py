@@ -2,6 +2,7 @@
 import os
 import json
 import ast
+import time
 import math
 import numpy as np
 import pandas as pd
@@ -69,6 +70,12 @@ class Classifier(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):
+    angles = np.linspace(angle_range[0], angle_range[1], num=len(distances))
+    x = distances * np.cos(angles)
+    y = distances * np.sin(angles)
+    return x, y
 
 def load_model_regressor(model_path):
     """ Load the trained model from a path. Epochs and layers are used to construct the file name. """
@@ -153,6 +160,71 @@ def load_single_row_from_csv(csv_path, row_index):
     row_values = data.iloc[row_index].tolist()
     return row_values
 
+def plot_cartisian(original_gt_i, predictions, classifications_i, distance, DPI, time_stamp):
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=DPI)
+    #print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
+    gt_x, gt_y = polar_to_cartesian(original_gt_i)
+    pred_x, pred_y = polar_to_cartesian(predictions)
+    ignored_gt = original_gt_i > distance
+
+    ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt_i)
+    ax.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o', label='Ignored GT', alpha=0.7, zorder=1)
+    ax.plot(gt_x[~ignored_gt], gt_y[~ignored_gt], label="Ground Truth LiDAR", marker='o', linestyle='-', alpha=0.7, zorder=2)
+
+    robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
+    ax.add_patch(robot_circle)
+
+    # draw a line from origin to first scan point
+    plt.plot([0, gt_x[0]], [0, gt_y[0]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+    plt.plot([0, pred_x[0]], [0, pred_y[0]], color='red', linestyle='--', alpha=0.5, zorder=3)
+    # draw a line from origin to last scan point
+    plt.plot([0, gt_x[-1]], [0, gt_y[-1]], color='blue', linestyle='--', alpha=0.5, zorder=3)
+    plt.plot([0, pred_x[-1]], [0, pred_y[-1]], color='red', linestyle='--', alpha=0.5, zorder=3)
+    # draw an arrow vector from origin to middle point(s)
+    plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
+    plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
+    #print(f"Classifications_i: {classifications_i}")
+    classified_as_object = classifications_i > 0.5
+    classified_as_no_object = ~classified_as_object
+    ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=30, label='Object', zorder=6)
+    ax.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange', marker='o', s=30, label='Not Object', zorder=5)
+
+    ax.set_aspect('equal')
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_title(f"prediction cartisian {time_stamp}")
+    ax.grid(True)
+    ax.legend()
+
+    #plot_type = 'cartesian' if task_type == 'cartesian' else 'scan_index'
+    filename = f"prediction_cartisian_{time_stamp}.png"
+    fig.savefig(os.path.join("/home/volle/Desktop/plots/cartisian", filename), bbox_inches='tight', dpi=DPI)
+    plt.close(fig)
+    
+
+def plot_scan_index(original_gt_i, predictions, classifications_i, distance, DPI, time_stamp):
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=DPI)
+    #print(f"Worker {worker_id} plotting scan index LiDAR for sample {i}...")
+    ax.plot(original_gt_i, label="Ground Truth LiDAR", marker="o")
+    #ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
+    ignored_gt = original_gt_i > distance
+    ax.scatter(np.arange(len(original_gt_i))[ignored_gt], original_gt_i[ignored_gt], color='red', marker='o', label='Ignored GT')
+    classified_as_object = classifications_i > 0.5
+    classified_as_no_object = ~classified_as_object
+    ax.scatter(np.arange(len(predictions))[classified_as_object], predictions[classified_as_object], color='green', marker='o', s=50, label='Object')
+    ax.scatter(np.arange(len(predictions))[classified_as_no_object], predictions[classified_as_no_object], color='orange', marker='o', s=50, label='Not Object')
+    ax.set_xlabel(f"Scan Index {time_stamp}")
+    ax.set_ylabel("Distance (m)")
+    ax.set_title(f"{id}")
+    ax.grid(True)
+    ax.legend()
+
+    #plot_type = 'cartesian' if task_type == 'cartesian' else 'scan_index'
+    filename = f"prediction_cartisian_{time_stamp}.png"
+    fig.savefig(os.path.join("/home/volle/Desktop/plots/scan_index", filename), bbox_inches='tight', dpi=DPI)
+    plt.close(fig)
+
+
 def main():
     dataset_csv = os.path.join("Extracted features", "features_all_normalized.csv")
     dataset_root = os.path.join("dataset_2")
@@ -198,15 +270,21 @@ def main():
         print(f"LiDAR prediction plot saved to {lidar_plot_file}")
 
 def main_predict():
-    model_lidar, hyperparams_lidar = load_model_regressor(r"Echolocation\Models\2.0m_threshold\echolocation-wide-long-all_200_2_model_regressor.pth")
-    model_classifier, hyperparams_classifier = load_model_classifier(r"Echolocation\Models\2.0m_threshold\echolocation-wide-long-all_200_model_classifier.pth")
-    input_features = load_single_row_from_csv(r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\features_all_normalized.csv", 96)
-    features = list(FeatureExtractionScript.exstract_single_features_from_wav(r"Echolocation\Data\dataset\echolocation-wide-long-all\1744896231_104_Wide_Long\1744896231_104_Wide_Long_sound.wav").values())
+    DPI = 200
+    time_stamp = time.strftime("%d-%m_%H-%M-%S")
+    model_lidar, hyperparams_lidar = load_model_regressor(r"Echolocation/Models/2.0m_threshold/echolocation-wide-long-all_200_2_model_regressor.pth")
+    model_classifier, hyperparams_classifier = load_model_classifier(r"Echolocation/Models/2.0m_threshold/echolocation-wide-long-all_200_model_classifier.pth")
+    #input_features = load_single_row_from_csv(r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\features_all_normalized.csv", 96)
+    features = list(FeatureExtractionScript.exstract_single_features_from_wav(r"/home/volle/Desktop/wav").values())
+    lidar_file = "/home/volle/Desktop/dist.json"
+    with open(lidar_file, "r") as f:
+        lidar_data = json.load(f)
+    lidar_vector = np.array(lidar_data, dtype=float)
     print(f"Extracted features: {features}")
     print(f"length of features: {len(features)}")
-    features = NormalizeFeatures.normalize_single_feature_vector(features, r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\mean_std.csv")
+    features = NormalizeFeatures.normalize_single_feature_vector(features, r"Echolocation/FeatureExtraction/ExtractedFeatures/echolocation-wide-long-all/mean_std.csv")
     print(f"Normalized features: {features}")
-    print(input_features.pop(0))  # Remove the first element (sample ID)
+    #print(input_features.pop(0))  # Remove the first element (sample ID)
 
     input_tensor = torch.tensor(features, dtype=torch.float32)
     print(f"Input tensor: {input_tensor}")
@@ -217,9 +295,21 @@ def main_predict():
     print(f"Predicted output: {predictions}")
     predicrions_classefied = predictions_classefied.numpy()
     predictions = predictions.numpy()
+    predictions = predictions[0]
+    print("Predictions:",predictions)
+    print("Predictions class:",predicrions_classefied)
+
+    plot_cartisian(lidar_vector, predictions, predicrions_classefied[0], 2.0, DPI, time_stamp)
+    plot_scan_index(lidar_vector, predictions, predicrions_classefied[0], 2.0, DPI, time_stamp)
+    return
+    x, y = polar_to_cartesian(predictions)
+    print("x:",x)
+    print("y:",y)
+    
     # Plot the predictions
     plt.figure(figsize=(10, 6))
-    plt.plot(predictions[0], label="Predicted Output", marker="o")
+    plt.scatter(x,y)
+    #plt.plot(predictions[0], label="Predicted Output", marker="o")
     plt.xlabel("Index")
     plt.ylabel("Value")
     plt.title("Predicted Output Visualization")

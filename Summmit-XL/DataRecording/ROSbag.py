@@ -17,11 +17,12 @@ def start_recording(bag_file, topics):
     # Construct the rosbag record command
     command = ['rosbag', 'record', '-O', bag_file] + topics
 
-    print("Recording the following topics: {}".format(", ".join(topics)))
+    #print("Recording the following topics: {}".format(", ".join(topics)))
     print("Saving to bag file: {}".format(bag_file))
 
     # Start the rosbag record command
     process = subprocess.Popen(command)
+    #print("Process: {}".format(process))
     return process
 
 

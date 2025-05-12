@@ -28,15 +28,15 @@ ROSBAG_TOPICS = ["/robot/front_laser/scan_filtered", "/robot/front_rgbd_camera/r
 CHIRPS_CONFIG = {
 	"durations_ms": {
 		#"Short": 1,
-		#"MediumShort": 5,
-		#"Medium": 10,
-		#"MediumLong": 50,
+		"MediumShort": 5,
+		"Medium": 10,
+		"MediumLong": 50,
 		"Long": 100
 	},
 	"frequency_Hz": {
-		#"Low": "70Hz-1kHz",
-		#"Mid": "1kHz-10kHz",
-		#"High": "10kHz-20kHz",
+		"Low": "70Hz-1kHz",
+		"Mid": "1kHz-10kHz",
+		"High": "10kHz-20kHz",
 		"Wide": "70Hz-20kHz"
 	}
 
@@ -63,7 +63,6 @@ def generate_sweep_signal(freq_name, freq_range, duration_value):
 
     # Duplicate the channel for stereo playback
     stereo_sweep_signal = np.column_stack((extended_signal, extended_signal)).astype(np.float32)
-    #print(stereo_sweep_signal)
 
     # Play the signal and record simultaneously
     recorded_signal = sd.playrec(stereo_sweep_signal, samplerate=SAMPLE_RATE, channels=2, dtype='float32')
@@ -102,8 +101,7 @@ def generate_batch():
     os.makedirs(ROSbag_dir_path) #, exist_ok=True)
     ROSfile = BAG_FILE.format(batch_id_rosbag)
     ROSbag_process = start_recording(os.path.join(ROSbag_dir_path, BAG_FILE.format(batch_id_rosbag)), ROSBAG_TOPICS) # start recording rosbag
-    time.sleep(WAIT)
-    stop_recording(ROSbag_process)
+
 
     for duration_name, duration_value in CHIRPS_CONFIG["durations_ms"].items():
         for freq_name, freq_range in CHIRPS_CONFIG["frequency_Hz"].items():
@@ -137,9 +135,10 @@ def generate_batch():
             
 
             # --- STEP 2: Record stereo audio ---
-            # Record the stereo sweep signal
+            
+# Record the stereo sweep signal
             recorded_signal = generate_sweep_signal(freq_name, freq_range, duration_value)
-	    #stop_recording(ROSbag_process) # stop recording ROSbag
+	    stop_recording(ROSbag_process) # stop recording ROSbag
             
 
             # Collect all batch data

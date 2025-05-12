@@ -103,7 +103,7 @@ def generate_batch():
     ROSfile = BAG_FILE.format(batch_id_rosbag)
     ROSbag_process = start_recording(os.path.join(ROSbag_dir_path, BAG_FILE.format(batch_id_rosbag)), ROSBAG_TOPICS) # start recording rosbag
     time.sleep(WAIT)
-    stop_recording(ROSbag_process)
+    
 
     for duration_name, duration_value in CHIRPS_CONFIG["durations_ms"].items():
         for freq_name, freq_range in CHIRPS_CONFIG["frequency_Hz"].items():
@@ -139,7 +139,7 @@ def generate_batch():
             # --- STEP 2: Record stereo audio ---
             # Record the stereo sweep signal
             recorded_signal = generate_sweep_signal(freq_name, freq_range, duration_value)
-	    #stop_recording(ROSbag_process) # stop recording ROSbag
+	    
             
 
             # Collect all batch data

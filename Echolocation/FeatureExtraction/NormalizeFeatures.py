@@ -54,12 +54,12 @@ def normalize_single_feature_vector(feature_vector, mean_std_csv):
     """
     # Load the mean and std values from the CSV file
     mean_std_df = pd.read_csv(mean_std_csv)
-    print(f"Loaded mean and std from {mean_std_df}")
+    #print(f"Loaded mean and std from {mean_std_df}")
     
     # Create a dictionary for quick lookup of mean and std values
     mean_std_dict = dict(zip(mean_std_df["Feature"], zip(mean_std_df["Mean"], mean_std_df["Std"])))
     mean_std_list = list(mean_std_dict.values())
-    print(f"Mean and std dictionary: {mean_std_list}")
+    #print(f"Mean and std dictionary: {mean_std_list}")
     
     # Normalize the feature vector
     normalized_vector = []

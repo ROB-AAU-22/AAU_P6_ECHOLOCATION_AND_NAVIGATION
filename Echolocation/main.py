@@ -9,7 +9,7 @@ from FeatureExtraction import FeatureExtractionScript
 from FeatureExtraction import NormalizeFeatures
 from MachineLearning.Training import mainTraining
 from Data import DownloadDataKaggle
-from MachineLearning import ModelPredict
+from MachineLearning.Prediction import Predict
 
 
 def main():
@@ -56,7 +56,7 @@ def main():
                                                "features_all_normalized.csv")
 
         if not os.path.exists(extracted_features_path):
-            print(f"Feature file {extracted_features_path} does not exist.")
+            print(f"Feature fileplot {extracted_features_path} does not exist.")
             print(f"Extracting features for {extracted_features_path}...")
             FeatureExtractionScript.extract_features(dataset_root_path, chosen_dataset)
             print("Normalizing features...")
@@ -69,9 +69,7 @@ def main():
 
     elif train_predict_input == "p" or str(train_predict_input) == "1":
         print("predict script")
-        model, hyperparameters = ModelPredict.main_predict()
-        print("Model: \n", model)
-        print("hyperparameters: \n", hyperparameters)
+        Predict.main_predict()
     else:
         print("Invalid input. Please enter 'train' or 'predict'.")
         return
