@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from MachineLearning.Training.TrainingConfig import NUM_EPOCHS, CLASSIFICATION_THRESHOLDS, DISTANCE_THRESHOLD, DISTANCE_THRESHOLDS, REGRESSOR_LEARNING_RATES, REGRESSOR_HIDDEN_SIZES, REGRESSOR_BATCH_SIZES, REGRESSOR_NUM_LAYERS_LIST, REGRESSOR_WEIGHT_DECAYS, REGRESSOR_LAYER_TYPE, CLASSIFIER_LEARNING_RATES, CLASSIFIER_HIDDEN_SIZES, CLASSIFIER_BATCH_SIZES, CLASSIFIER_NUM_LAYERS_LIST, CLASSIFIER_WEIGHT_DECAYS, CLASSIFIER_LAYER_TYPE
 from MachineLearning.Training.DataHandler import build_dataset_from_csv, ClassifierDataset
-from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor, Regressor, Classifier
+from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, Regressor, Classifier
 from MachineLearning.Training.ModelTraining import compute_error_metrics, train_regressor, evaluate_regressor, train_classifier, evaluate_classifier
 from MachineLearning.Training.Plotting import start_multiprocessing_plotting
 from MachineLearning.Training.EvaluationPlots import plot_precision_recall_curve, plot_confusion_matrix_all, plot_roc_curve
@@ -120,12 +120,8 @@ def model_training(dataset_root_directory, chosen_dataset):
                                     best_regressor_val_loss = avg_val_loss
                                     best_regressor_hyperparams = regressor_hyperparams
                                     best_regressor_state = regressor.state_dict()
-                                    #best_regressor_train_preds = np.concatenate(preds_train_list, axis=0).flatten()
-                                    #best_regressor_val_preds = np.concatenate(preds_val_list, axis=0).flatten()
                                     best_regressor_train_preds = preds_train_list
                                     best_regressor_val_preds = preds_val_list
-                                    #best_regressor_train_targets = np.concatenate(targets_train_list, axis=0).flatten()
-                                    #best_regressor_val_targets = np.concatenate(targets_val_list, axis=0).flatten()
                                     best_regressor_train_targets = targets_train_list
                                     best_regressor_val_targets = targets_val_list
                                     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
@@ -188,11 +184,6 @@ def model_training(dataset_root_directory, chosen_dataset):
                                     scheduler
                                 )
 
-                                # Evaluate classifier performance on val set
-                                #y_val_preds, y_val_labels_flat = evaluate_classifier(
-                                #    classifier, classifier_loader_val, device, predicted_val, y_val_labels
-                                #)
-                                #val_classifier_accuracy = np.mean((y_val_preds > 0.5) == y_val_labels_flat)
 
                                 print(f"Val Accuracy: {avg_val_loss:.4f}")
                                 classifier_hyperparams = {

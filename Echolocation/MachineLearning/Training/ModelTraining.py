@@ -6,7 +6,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
 from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset, MLPRegressor
-from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
 
 # ---------------------------
 # Training Functions
@@ -161,8 +161,9 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
         precision = precision_score(val_labels, y_val_preds_thresholded, zero_division=0)
         recall = recall_score(val_labels, y_val_preds_thresholded, zero_division=0)
         f1_classifier = f1_score(val_labels, y_val_preds_thresholded, zero_division=0)
+        accuracy = accuracy_score(val_labels, y_val_preds_thresholded)
         print(
-            f"  Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}"
+            f"      Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}, Accuracy: {accuracy:.4f}"
         )
 
         # Adjust the learning rate using the scheduler if provided
