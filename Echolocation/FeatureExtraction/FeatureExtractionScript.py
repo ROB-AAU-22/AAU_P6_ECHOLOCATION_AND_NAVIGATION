@@ -226,3 +226,39 @@ def extract_features(dataset_root_directory, chosen_dataset):
     output_csv = os.path.join(output_folder, "features_all.csv")
     df.to_csv(output_csv, index=False)
     print(f"DataFrame saved to {output_csv}")
+
+
+def exstract_single_features_from_wav(wav_file_path):
+    """
+    Extracts features from a single .wav file.
+    """
+    folder_features = {}
+    try:
+        if wav_file_path:
+            stereo_signal, sr = sf.read(wav_file_path)
+
+            if stereo_signal.ndim != 2 and stereo_signal.shape[1] < 2:
+                raise ValueError("Input audio file is not stereo.")
+            
+            stereo_signal = cut_sound_file(stereo_signal, sr, before_threshold=0.005, after_threshold=0.3)
+            
+            left_ch, right_ch = stereo_signal[:, 0], stereo_signal[:, 1]
+
+            folder_features.update({
+                    **{f"left_{k}": v for k, v in compute_time_features(left_ch, sr).items()},
+                    **{f"left_{k}": v for k, v in compute_frequency_features(left_ch, sr).items()},
+                    **{f"right_{k}": v for k, v in compute_time_features(right_ch, sr).items()},
+                    **{f"right_{k}": v for k, v in compute_frequency_features(right_ch, sr).items()},
+                    **compute_spatial_features(left_ch, right_ch, sr)
+                })
+                
+            stereo_signal_duration = len(stereo_signal) / sr
+            if stereo_signal_duration < 2.0:
+                folder_features.update({f"left_{k}": v for k, v in compute_room_acoustics_features(left_ch, sr).items()})
+                folder_features.update({f"right_{k}": v for k, v in compute_room_acoustics_features(right_ch, sr).items()})
+
+    except Exception as e:
+        print("Error processing ", wav_file_path, ": ", e)
+        return None
+
+    return folder_features
