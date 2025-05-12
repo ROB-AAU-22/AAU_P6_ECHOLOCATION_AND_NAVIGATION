@@ -214,7 +214,7 @@ def model_training(dataset_root_directory, chosen_dataset):
                                 classifier_info_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter,distance_folder, "classifier_results.txt")
                                 classifier_info_text = (
                                     f"Classifier Hyperparameters: {classifier_hyperparams}\n"
-                                    f"  Best Regressor Loss: {avg_val_loss:.4f}\n\n\n"
+                                    f"  Best classifier Loss: {avg_val_loss:.4f}\n\n\n"
                                 )
 
                                 # Write or append to the file
@@ -281,7 +281,7 @@ def model_training(dataset_root_directory, chosen_dataset):
             mae_array.append(np.nanmean(np.abs(ground_truth_test.numpy()[i] - predicted_test.numpy()[i])))
             rmse_array.append(np.sqrt(np.nanmean((ground_truth_test.numpy()[i] - predicted_test.numpy()[i]) ** 2)))
             mre_array.append(np.nanmean(np.abs((ground_truth_test.numpy()[i] - predicted_test.numpy()[i]) / (ground_truth_test.numpy()[i] + 1e-10))) if np.any(ground_truth_test.numpy()[i]) else 0)
-            range_metrics.append(compute_error_metrics(ground_truth_test.numpy()[i], predicted_test.numpy()[i]))
+            range_metrics.append(compute_error_metrics(ground_truth_test.numpy()[i], predicted_test.numpy()[i], distance))
 
         mean_absolute_error = np.nanmean(mae_array)
         root_mean_square_error = np.nanmean(rmse_array)

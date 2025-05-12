@@ -231,8 +231,8 @@ def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
 
     return y_val_preds_thresholded, y_val_labels_thresholded, torch.cat(preds_list).numpy(), torch.cat(targets_list)
 
-def compute_error_metrics(Y_true, Y_pred):
-    range_bins = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
+def compute_error_metrics(Y_true, Y_pred, distance):
+    range_bins = [(0, distance)]
     results = {f"{low}_{high}": {'y_true': [], 'y_pred': []} for low, high in range_bins}
 
     for y_true, y_pred in zip(Y_true, Y_pred):
