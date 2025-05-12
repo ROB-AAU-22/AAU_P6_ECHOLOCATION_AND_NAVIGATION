@@ -6,26 +6,31 @@ import json
 
 class LaserScanListener:
     def __init__(self, directory):
+        rospy.init_node('sound_file_subscriber')
         self.laser_data = None
         self.directory = directory  # Directory where the JSON files will be stored
         self.angle_increment = 0.00436333334073  # Assuming this is the correct increment value
+        rospy.loginfo("Laser Scan Listener node initialized.")
+        rospy.Subscriber('/robot/front_laser/scan_filtered', LaserScan, self.laser_callback)
 
     def laser_callback(self, msg):
         """Callback function that receives LaserScan messages."""
         self.laser_data = list(msg.ranges)
-        rospy.signal_shutdown("Laser data received")  # Shutdown the node after data is received
+        #rospy.signal_shutdown("Laser data received")  # Shutdown the node after data is received
 
     def receive_laser_scan(self):
         """Start the ROS node, subscribe to the LaserScan topic, and receive the data."""
-        rospy.init_node('laser_listener', anonymous=True)
-        rospy.loginfo("Laser Scan Listener node initialized.")
-        rospy.Subscriber('/robot/front_laser/scan_filtered', LaserScan, self.laser_callback)
+        #rospy.init_node('laser_listener', anonymous=True)
+        #rospy.loginfo("Laser Scan Listener node initialized.")
+        #rospy.Subscriber('/robot/front_laser/scan_filtered', LaserScan, self.laser_callback)
 
         # Block until data is received
-        rospy.spin()
+        #rospy.spin()
 
+        #if
         if self.laser_data is None:
-            raise RuntimeError("Failed to receive laser scan data.")
+            print("waiting for lidar skan")
+            #raise RuntimeError("Failed to receive laser scan data.")
         return self.laser_data
 
     def get_next_json_filename(self):
