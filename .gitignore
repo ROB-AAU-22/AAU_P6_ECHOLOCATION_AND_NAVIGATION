@@ -2,3 +2,4 @@
 /Echolocation/Data/dataset_zip/*
 /Echolocation/FeatureExtraction/ExtractedFeatures
 **/__pycache__/
+/Echolocation/Models

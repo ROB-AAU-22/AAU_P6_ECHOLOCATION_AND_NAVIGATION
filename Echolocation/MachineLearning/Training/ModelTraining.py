@@ -12,6 +12,20 @@ from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_sco
 # Training Functions
 # ---------------------------
 def train_one_epoch_regressor(model, train_loader, optimizer, loss_fn, device):
+    """
+    Trains a regression model for one epoch.
+    Args:
+        model (torch.nn.Module): The regression model to be trained.
+        train_loader (torch.utils.data.DataLoader): DataLoader for the training dataset.
+        optimizer (torch.optim.Optimizer): Optimizer used to update model parameters.
+        loss_fn (callable): Loss function to compute the training loss.
+        device (torch.device): Device on which the computation will be performed (e.g., 'cpu' or 'cuda').
+    Returns:
+        tuple: A tuple containing:
+            - avg_training_loss (float): The average training loss for the epoch.
+            - preds_train_list (numpy.ndarray): Concatenated predictions for the training set.
+            - targets_train_list (numpy.ndarray): Concatenated true targets for the training set.
+    """
     model.train()  # Set the model to training mode
     train_losses = []  # List to store training losses for the epoch
     preds_train_list = []  # List to store predictions for the training set
@@ -41,6 +55,19 @@ def train_one_epoch_regressor(model, train_loader, optimizer, loss_fn, device):
 
 
 def validate_one_epoch_regressor(model, val_loader, loss_fn, device):
+    """
+    Validates a regression model for one epoch using the provided validation data loader.
+    Args:
+        model (torch.nn.Module): The regression model to validate.
+        val_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
+        loss_fn (callable): Loss function to compute the validation loss.
+        device (torch.device): Device to run the validation on (e.g., 'cpu' or 'cuda').
+    Returns:
+        tuple: A tuple containing:
+            - avg_val_loss (float): The average validation loss for the epoch.
+            - preds_val_list (numpy.ndarray): Concatenated predictions for the entire validation set.
+            - targets_val_list (numpy.ndarray): Concatenated true targets for the entire validation set.
+    """
     model.eval()  # Set the model to evaluation mode
     preds_val_list, targets_val_list = [], []  # Lists to store validation predictions and targets
     val_loss = []  # List to store validation losses
@@ -64,6 +91,27 @@ def validate_one_epoch_regressor(model, val_loader, loss_fn, device):
     return avg_val_loss, preds_val_list, targets_val_list
 
 def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler=None, patience=PATIENCE):
+    """
+    Trains a regression model using the provided training and validation data loaders.
+    Args:
+        model (torch.nn.Module): The regression model to be trained.
+        train_loader (torch.utils.data.DataLoader): DataLoader for the training dataset.
+        val_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
+        optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
+        loss_fn (callable): Loss function to compute the training and validation loss.
+        device (torch.device): Device to run the training on (e.g., 'cuda' or 'cpu').
+        epochs (int): Number of epochs to train the model.
+        scheduler (torch.optim.lr_scheduler._LRScheduler, optional): Learning rate scheduler. Defaults to None.
+        patience (int, optional): Number of epochs to wait for improvement in validation loss before early stopping. Defaults to PATIENCE.
+    Returns:
+        tuple: A tuple containing:
+            - model (torch.nn.Module): The trained model.
+            - avg_val_loss (float): The average validation loss of the last epoch.
+            - preds_train_list (list): List of predictions from the training dataset.
+            - preds_val_list (list): List of predictions from the validation dataset.
+            - targets_train_list (list): List of ground truth targets from the training dataset.
+            - targets_val_list (list): List of ground truth targets from the validation dataset.
+    """
     # Move the model to the specified device (GPU or CPU)
     model.to(device)
     best_loss = float("inf")  # Initialize the best loss to infinity
@@ -81,6 +129,16 @@ def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device,
         )
 
         print(f"[Regressor] Epoch {epoch + 1}/{epochs}, Train Loss: {avg_training_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+        
+        #print(f"Predictions: {np.concatenate(preds_val_list).flatten()}")
+        # calculate mean absolute error
+        #mae = np.mean(np.abs(np.concatenate(preds_val_list).flatten() - np.concatenate(targets_val_list).flatten()))
+        # calculate mean squared error
+        #mse = np.mean((np.concatenate(preds_val_list).flatten() - np.concatenate(targets_val_list).flatten()) ** 2)
+        # calculate root mean squared error
+        #rmse = np.sqrt(mse)
+        #print(f"    Mean Absolute Error: {mae:.4f}, Mean Squared Error: {mse:.4f}, Root Mean Squared Error: {rmse:.4f}")
+
 
         # Adjust the learning rate using the scheduler if provided
         if scheduler:
@@ -88,7 +146,7 @@ def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device,
             print(f"    Learning rate: {scheduler.get_last_lr()[0]:.6f}")
 
         # Early stopping logic
-        if avg_val_loss < best_loss:
+        if round(avg_val_loss,4) < round(best_loss,4):
             best_loss = avg_val_loss  # Update the best loss
             patience_counter = 0  # Reset the patience counter
         else:
@@ -106,6 +164,17 @@ def train_regressor(model, train_loader, val_loader, optimizer, loss_fn, device,
 
 
 def train_one_epoch_classifier(model, train_loader, optimizer, loss_fn, device):
+    """
+    Trains a classification model for one epoch.
+    Args:
+        model (torch.nn.Module): The model to be trained.
+        train_loader (torch.utils.data.DataLoader): DataLoader for the training dataset.
+        optimizer (torch.optim.Optimizer): Optimizer used to update model parameters.
+        loss_fn (torch.nn.Module): Loss function to compute the training loss.
+        device (torch.device): Device on which to perform computations (e.g., 'cpu' or 'cuda').
+    Returns:
+        float: The average training loss for the epoch.
+    """
     model.train()
     train_loss = []
     for Xb, Yb in train_loader:
@@ -122,6 +191,19 @@ def train_one_epoch_classifier(model, train_loader, optimizer, loss_fn, device):
 
 
 def validate_one_epoch_classifier(model, val_loader, loss_fn, device):
+    """
+    Validates a classifier model for one epoch using the provided validation data loader.
+    Args:
+        model (torch.nn.Module): The classifier model to validate.
+        val_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
+        loss_fn (callable): Loss function to compute the validation loss.
+        device (torch.device): The device (CPU or GPU) to perform computations on.
+    Returns:
+        tuple: A tuple containing:
+            - avg_val_loss (float): The average validation loss over the epoch.
+            - val_preds (numpy.ndarray): Flattened array of predicted values for the validation set.
+            - val_labels (numpy.ndarray): Flattened array of true labels for the validation set.
+    """
     model.eval()
     val_loss = []
     val_preds, val_labels = [], []
@@ -141,6 +223,26 @@ def validate_one_epoch_classifier(model, val_loader, loss_fn, device):
 
 
 def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, scheduler, patience=PATIENCE):
+    """
+    Trains a classification model using the provided training and validation data loaders.
+    Args:
+        model (torch.nn.Module): The classification model to be trained.
+        train_loader (torch.utils.data.DataLoader): DataLoader for the training dataset.
+        val_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
+        optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
+        loss_fn (callable): Loss function to compute the training and validation loss.
+        device (torch.device): Device to run the training on (e.g., 'cpu' or 'cuda').
+        epochs (int): Number of epochs to train the model.
+        scheduler (torch.optim.lr_scheduler._LRScheduler or None): Learning rate scheduler to adjust the learning rate during training.
+        patience (int, optional): Number of epochs to wait for improvement in validation loss before early stopping. Defaults to PATIENCE.
+    Returns:
+        torch.nn.Module: The trained model.
+        float: The final validation loss after training.
+    Notes:
+        - The function performs early stopping if the validation loss does not improve for a specified number of epochs (patience).
+        - During training, it prints the training loss, validation loss, classification accuracy, and other metrics (precision, recall, F1-score, accuracy).
+        - If a scheduler is provided, it adjusts the learning rate based on the validation loss.
+    """
     best_loss = float("inf")
     patience_counter = 0
 
@@ -185,6 +287,19 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
 
 
 def evaluate_regressor(model, dataloader, device):
+    """
+    Evaluates a regression model on a given dataset.
+
+    Args:
+        model (torch.nn.Module): The regression model to evaluate.
+        dataloader (torch.utils.data.DataLoader): DataLoader providing the dataset for evaluation.
+        device (torch.device): The device (CPU or GPU) on which the model and data should be processed.
+
+    Returns:
+        tuple: A tuple containing:
+            - torch.Tensor: Concatenated predictions from the model for the entire dataset.
+            - torch.Tensor: Concatenated ground truth targets from the dataset.
+    """
     model.eval()
     preds_list, targets_list = [], []
     with torch.no_grad():
@@ -196,6 +311,23 @@ def evaluate_regressor(model, dataloader, device):
     return torch.cat(preds_list), torch.cat(targets_list)
 
 def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
+    """
+    Evaluates the performance of a classifier model on validation data.
+    Args:
+        model (torch.nn.Module): The trained PyTorch model to evaluate.
+        device (torch.device): The device (CPU or GPU) to perform computations on.
+        predicted_val (torch.Tensor): The predicted values from the model.
+        y_val_labels (torch.Tensor): The ground truth labels for the validation data.
+        batch_size (int): The batch size to use for the DataLoader.
+    Returns:
+        tuple: A tuple containing:
+            - y_val_preds_thresholded (numpy.ndarray): Thresholded predictions for the validation data.
+            - y_val_labels_thresholded (numpy.ndarray): Thresholded ground truth labels for the validation data.
+            - concatenated_preds (numpy.ndarray): Concatenated predictions from all batches.
+            - concatenated_targets (torch.Tensor): Concatenated ground truth labels from all batches.
+    Prints:
+        Precision, Recall, and F1 score of the classifier on the validation data.
+    """
     model.eval()
     #print(f"predicted_val: {predicted_val}")
     #print(f"y_val_labels: {y_val_labels}")
