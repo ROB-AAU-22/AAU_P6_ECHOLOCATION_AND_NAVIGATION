@@ -58,7 +58,7 @@ def load_model_regressor(device, model_path):
     hyperparams = model_checkpoint['hyperparameters']
     input_dim = hyperparams['input_dim']
     output_dim = hyperparams['output_dim']
-    hidden_size = hyperparams['hidden_size']
+    hidden_size = hyperparams['hidden_dim']
     hidden_layer_count = hyperparams['num_layers']
     layer_type = hyperparams['layer_type']
     
@@ -75,7 +75,7 @@ def load_model_classifier(device, model_path):
     hyperparams = model_checkpoint['hyperparameters']
     input_dim = hyperparams['input_dim']
     output_dim = hyperparams['output_dim']
-    hidden_size = hyperparams['hidden_size']
+    hidden_size = hyperparams['hidden_dim']
     hidden_layer_count = hyperparams['num_layers']
     layer_type = hyperparams['layer_type']
     

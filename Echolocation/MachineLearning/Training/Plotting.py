@@ -88,7 +88,7 @@ def plot_worker(queue, worker_id):
 
 def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_distances_test, num_epochs, num_layers, cartesian_folder, scan_index_folder, best_threshold, chosen_dataset, ids):
     start_time = time.time()
-    num_workers = int(cpu_count())
+    num_workers = int(cpu_count())-2 if cpu_count() > 1 else 1
     print(f"Using {num_workers} multiprocessing workers for plotting")
 
     task_queue = Queue()

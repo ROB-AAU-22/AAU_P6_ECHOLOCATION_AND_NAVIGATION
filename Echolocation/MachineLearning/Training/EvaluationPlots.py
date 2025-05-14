@@ -6,7 +6,11 @@ from sklearn.metrics import (
     confusion_matrix,
     ConfusionMatrixDisplay,
     roc_curve,
-    auc
+    auc,
+    precision_score,
+    recall_score,
+    f1_score,
+    accuracy_score,
 )
 from MachineLearning.Training.TrainingConfig import PLOT_DPI
 DPI = PLOT_DPI
@@ -15,6 +19,11 @@ def plot_precision_recall_curve(y_true, y_probs, save_path=None):
     #print(f"y_true: {y_true}")
     #print(f"y_probs: {y_probs}")
     precision, recall, _ = precision_recall_curve(y_true, y_probs)
+    # calculate scores
+    prec_score = precision_score(y_true, (y_probs > 0.5).astype(int))
+    rec_score = recall_score(y_true, (y_probs > 0.5).astype(int))
+    f1 = f1_score(y_true, (y_probs > 0.5).astype(int))
+    acc = accuracy_score(y_true, (y_probs > 0.5).astype(int))
     plt.figure(figsize=(8, 6), dpi=DPI)
     plt.plot(recall, precision, label="Precision-Recall Curve", color="blue")
     plt.xlabel("Recall")
@@ -25,6 +34,7 @@ def plot_precision_recall_curve(y_true, y_probs, save_path=None):
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=DPI)
     plt.close()
+    return prec_score, rec_score, f1, acc
 
 def plot_confusion_matrix_all(y_true, y_probs, threshold=0.5, save_path=None):
     y_pred = (np.array(y_probs) > threshold).astype(int)
@@ -35,6 +45,7 @@ def plot_confusion_matrix_all(y_true, y_probs, threshold=0.5, save_path=None):
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=DPI)
     plt.close()
+    return cm
 
 def plot_roc_curve(y_true, y_probs, save_path=None):
     fpr, tpr, _ = roc_curve(y_true, y_probs)
