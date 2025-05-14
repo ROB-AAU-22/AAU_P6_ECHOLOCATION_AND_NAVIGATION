@@ -40,9 +40,9 @@ def prepare_dataset(csv_file, dataset_root_directory, distance):
     X, Y, sample_ids, feature_names_full, original_distances = build_dataset_from_csv(csv_file, dataset_root_directory, distance)
     if X.shape[0] == 0:
         return None
-    print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features, LiDAR scan length: {Y.shape[1]}")
-    print("X stats: min", np.min(X), "max", np.max(X))
-    print("Y stats: min", np.min(Y), "max", np.max(Y))
+    #print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features, LiDAR scan length: {Y.shape[1]}")
+    #print("X stats: min", np.min(X), "max", np.max(X))
+    #print("Y stats: min", np.min(Y), "max", np.max(Y))
     return X, Y, sample_ids, original_distances, feature_names_full
 
 def split_data(X, Y, original_distances, sample_ids):
@@ -75,7 +75,7 @@ def split_data(X, Y, original_distances, sample_ids):
     X_train, X_val, Y_train, Y_val, od_train, od_val, sid_train, sid_val = train_test_split(
         X_train_val, Y_train_val, od_train_val, sid_train_val, test_size=0.15, random_state=42)
 
-    print("Training samples:", X_train.shape[0], "Validation:", X_val.shape[0], "Test:", X_test.shape[0])
+    #print("Training samples:", X_train.shape[0], "Validation:", X_val.shape[0], "Test:", X_test.shape[0])
     return (AudioLidarDataset(X_train, Y_train),
             AudioLidarDataset(X_val, Y_val),
             AudioLidarDataset(X_test, Y_test),
@@ -132,11 +132,11 @@ def run_regressor_grid_search(train_dataset, val_dataset, test_dataset, input_di
                             print(f"\nTraining Regressor: hidden={hd}, batch={bs}, layers={nl}, type={lt}, decay={wd}")
                             model = Regressor(input_dim, hd, output_dim, num_layers=nl, layer_type=lt).to(device)
                             opt = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
-                            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 5)
+                            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 3)
 
                             model, val_loss, pt_train, pt_val, tt_train, tt_val = train_regressor(
                                 model, DataLoader(train_dataset, bs, True), #DataLoader(train_data, bs, True)
-                                DataLoader(val_dataset, bs, False),
+                                DataLoader(val_dataset, bs, True),  #DataLoader(val_dataset, bs, False)
                                 opt, loss_fn, device, NUM_EPOCHS, scheduler)
                             
                             params = {"input_dim": input_dim, "output_dim": output_dim, "lr": lr,
@@ -216,10 +216,10 @@ def run_classifier_grid_search(reg_results, output_dim, device, dataset_iter, di
                             model = Classifier(input_dim=output_dim, hidden_dim=hd, output_dim=output_dim,
                                                num_layers=nl, layer_type=lt).to(device)
                             opt = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
-                            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 5)
+                            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 3)
 
                             model, val_loss = train_classifier(
-                                model, DataLoader(train_data, bs, True), DataLoader(val_data, bs, False), #DataLoader(train_data, bs, True)
+                                model, DataLoader(train_data, bs, True), DataLoader(val_data, bs, True), #DataLoader(val_data, bs, False)
                                 opt, loss_fn, device, NUM_EPOCHS, scheduler)
 
                             params = {"input_dim": output_dim, "output_dim": output_dim, "lr": lr,
@@ -330,6 +330,7 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
     # calculate accuracy
     accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
     with open(os.path.join(metrics_folder, "best_hyperparameters.txt"), 'a') as f:
+        f.write(f"\nDataset iteration: {dataset_iter}\n")
         f.write(f"\nBest Regressor Hyperparameters: {reg_results['hyperparams']}")
         f.write(f"\n  Best Validation Loss: {round(reg_results['val_loss'],4)}")
         f.write(f"\n  MAE: {mean_mae:.4f}, RMSE: {mean_rmse:.4f}, MRE: {mean_mre:.4f}")

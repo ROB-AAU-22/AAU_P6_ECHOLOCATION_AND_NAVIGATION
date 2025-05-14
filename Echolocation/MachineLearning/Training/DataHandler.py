@@ -28,8 +28,8 @@ def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_T
 
     # Sort DataFrame by 'filename' to maintain order
     df.sort_values("filename", inplace=True)
-    print("DataFrame preview:")
-    print(df.head())
+    #print("DataFrame preview:")
+    #print(df.head())
 
     # Initialize lists to hold features, labels, metadata, and feature names
     X_list = []
