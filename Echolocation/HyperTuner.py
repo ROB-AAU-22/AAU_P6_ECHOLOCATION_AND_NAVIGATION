@@ -46,20 +46,22 @@ def define_model(trial,input_dim, output_dim):
         nn.Sequential: A PyTorch sequential model.
     """
     # Optimize the number of layers, hidden units, and dropout ratio
-    n_layers = trial.suggest_int("n_layers", 2, 7)
+    n_layers = trial.suggest_int("n_layers", 2, 3)
     layers = []
 
     in_features = input_dim  # Input size for FashionMNIST (28x28 images)
     #print(f"Input features: {in_features}")
     for i in range(n_layers):
         # Suggest the number of units in the current layer
-        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [32, 64, 128, 256])
+        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [16, 32, 64, 128, 256, 512, 1024])
         #print(f"Layer {i}: {in_features} -> {out_features}")
         layers.append(nn.Linear(in_features, out_features))
         layers.append(nn.ReLU())  # Activation function
 
         # Suggest the dropout rate for the current layer
         #p = trial.suggest_float("dropout_l{}".format(i), 0.0, 0.2)
+        #p = trial.suggest_categorical("dropout_l{}".format(i), [0.0, 0.1, 0.2, 0.3])
+
         #layers.append(nn.Dropout(p))
 
         in_features = out_features  # Update input size for the next layer
@@ -89,7 +91,7 @@ def get_mnist(trial):
     splits = split_data(X, Y, original_distances, sample_ids)
     train_dataset, val_dataset, test_dataset, *split_info = splits
     
-    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128, 256, 512])
+    batch_size = trial.suggest_categorical("batch_size", [4, 8, 16, 32, 64, 128])
     # Load training data
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size, True
@@ -125,10 +127,10 @@ def objective(trial):
     model = define_model(trial,input_dim, output_dim).to(DEVICE)
 
     # Suggest the optimizer and learning rate
-    optimizer_name = trial.suggest_categorical("optimizer", ["Adam"])#, "RMSprop", "SGD"])
-    lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
-    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr, weight_decay=1e-4)
-
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
+    lr = 0.01
+    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr, weight_decay=trial.suggest_categorical("weight_decay", [1e-4, 1e-3, 1e-5, 0.0]))
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', 0.1, 3)
     loss_fn = MaskedMSELoss()  # Loss function
 
     # Training loop
@@ -172,6 +174,9 @@ def objective(trial):
 
         # Report intermediate results to Optuna
         trial.report(avg_val_loss, epoch)
+        
+        scheduler.step(avg_val_loss)
+        #print(f"    Learning rate: {scheduler.get_last_lr()[0]:.6f}")
 
         # Prune the trial if it is not promising
         if trial.should_prune():
@@ -183,7 +188,7 @@ def objective(trial):
 if __name__ == "__main__":
     # Create an Optuna study to maximize validation accuracy
     study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=100, timeout=1800, show_progress_bar=True)  # Run optimization for 100 trials or 600 seconds
+    study.optimize(objective, n_trials=200, timeout=2400, show_progress_bar=True)  # Run optimization for 100 trials or 600 seconds
 
     # Get statistics about the study
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
