@@ -43,7 +43,7 @@ def prepare_dataset(csv_file, dataset_root_directory, distance):
     #print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features, LiDAR scan length: {Y.shape[1]}")
     #print("X stats: min", np.min(X), "max", np.max(X))
     #print("Y stats: min", np.min(Y), "max", np.max(Y))
-    return X, Y, sample_ids, original_distances, feature_names_full
+    return X, Y, sample_ids, original_distances
 
 def split_data(X, Y, original_distances, sample_ids):
     """
@@ -125,13 +125,15 @@ def run_regressor_grid_search(train_dataset, val_dataset, test_dataset, input_di
 
     for lr in REGRESSOR_LEARNING_RATES:
         for hd in REGRESSOR_HIDDEN_DIMS:
+            nl = len(hd)
             for bs in REGRESSOR_BATCH_SIZES:
-                for nl in REGRESSOR_NUM_LAYERS_LIST:
-                    for wd in REGRESSOR_WEIGHT_DECAYS:
-                        for lt in REGRESSOR_LAYER_TYPE:
-                            print(f"\nTraining Regressor: hidden={hd}, batch={bs}, layers={nl}, type={lt}, decay={wd}")
+                for wd in REGRESSOR_WEIGHT_DECAYS:
+                    for lt in REGRESSOR_LAYER_TYPE:
+                        for ot in REGRESSOR_OPTIMIZER:
+                            print(f"\nTraining Regressor: hidden={hd}, batch={bs}, layers={nl}, type={lt}, decay={wd}, optimizer={ot}")
                             model = Regressor(input_dim, hd, output_dim, num_layers=nl, layer_type=lt).to(device)
-                            opt = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+
+                            opt = getattr(optim, ot)(model.parameters(), lr=lr, weight_decay=wd, fused=True)
                             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 3)
 
                             model, val_loss, pt_train, pt_val, tt_train, tt_val = train_regressor(
@@ -140,8 +142,10 @@ def run_regressor_grid_search(train_dataset, val_dataset, test_dataset, input_di
                                 opt, loss_fn, device, NUM_EPOCHS, scheduler)
                             
                             params = {"input_dim": input_dim, "output_dim": output_dim, "lr": lr,
-                                               "hidden_dim": hd, "batch_size": bs, "num_epochs": NUM_EPOCHS,
-                                               "num_layers": nl, "layer_type": lt, "weight_decay": wd}
+                                                "hidden_dim": hd, "batch_size": bs, "num_epochs": NUM_EPOCHS,
+                                                "num_layers": nl, "layer_type": lt, "weight_decay": wd, "optimizer": ot}
+                            
+                            
 
                             print(f"Val Loss: {val_loss:.4f}")
                             if val_loss < best_loss:
@@ -215,7 +219,7 @@ def run_classifier_grid_search(reg_results, output_dim, device, dataset_iter, di
                             print(f"\nTraining Classifier: hidden={hd}, batch={bs}, layers={nl}, type={lt}, decay={wd}")
                             model = Classifier(input_dim=output_dim, hidden_dim=hd, output_dim=output_dim,
                                                num_layers=nl, layer_type=lt).to(device)
-                            opt = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+                            opt = optim.Adam(model.parameters(), lr=lr, weight_decay=wd, fused=True)
                             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 3)
 
                             model, val_loss = train_classifier(
@@ -344,8 +348,8 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
                                    NUM_EPOCHS, reg_results['hyperparams']['num_layers'], cartesian_folder,
                                    scan_index_folder, CLASSIFICATION_THRESHOLDS, dataset_iter, sample_ids_test)
 
-    acc = ((classifications > best_threshold) == (classifications_true <= distance)).mean()
-    print(f"Classification Accuracy: {acc:.4f}")
+    #acc = ((classifications > best_threshold) == (classifications_true <= distance)).mean()
+    print(f"Classification Accuracy: {round(accuracy,4)}")
 
     # Save metrics summary
     header = ['chirp', 'range', 'best_validation_loss', 'mean_absolute_error', 'root_mean_square_error', 'mean_relative_error']
@@ -358,7 +362,7 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
     print("Model evaluation and saving complete.")
 
 
-def model_training(dataset_root_directory, chosen_dataset):
+def main_training(dataset_root_directory, chosen_dataset):
     """
     Trains machine learning models using a specified dataset and evaluates their performance.
     This function performs the following steps:
@@ -390,7 +394,7 @@ def model_training(dataset_root_directory, chosen_dataset):
             print("No valid samples found. Exiting.")
             return
 
-        X, Y, sample_ids, original_distances, feature_names = data
+        X, Y, sample_ids, original_distances = data
         splits = split_data(X, Y, original_distances, sample_ids)
         train_dataset, val_dataset, test_dataset, *split_info = splits
 

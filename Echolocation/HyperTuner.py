@@ -27,12 +27,8 @@ from MachineLearning.Training.ModelFunctions import MaskedMSELoss
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define constants for batch size, number of classes, and dataset paths
-BATCHSIZE = 128
-CLASSES = 10
-DIR = os.getcwd()  # Current working directory
-EPOCHS = 100  # Number of training epochs
-N_TRAIN_EXAMPLES = BATCHSIZE * 30  # Limit training examples for faster training
-N_VALID_EXAMPLES = BATCHSIZE * 10  # Limit validation examples for faster evaluation
+EPOCHS = 200  # Number of training epochs
+
 
 
 def define_model(trial,input_dim, output_dim):
@@ -46,23 +42,32 @@ def define_model(trial,input_dim, output_dim):
         nn.Sequential: A PyTorch sequential model.
     """
     # Optimize the number of layers, hidden units, and dropout ratio
-    n_layers = trial.suggest_int("n_layers", 2, 3)
+    n_layers = trial.suggest_int("n_layers", 2, 4)
     layers = []
 
     in_features = input_dim  # Input size for FashionMNIST (28x28 images)
     #print(f"Input features: {in_features}")
     for i in range(n_layers):
         # Suggest the number of units in the current layer
-        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [16, 32, 64, 128, 256, 512, 1024])
+        #out_features = trial.suggest_int("hidden_dim_{}".format(i), 32, 512)
+        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [64, 128, 256, 512])
         #print(f"Layer {i}: {in_features} -> {out_features}")
         layers.append(nn.Linear(in_features, out_features))
-        layers.append(nn.ReLU())  # Activation function
+        
+        layer_type = trial.suggest_categorical("layer_type_{}".format(i), ["ReLU", "Tanh", "Sigmoid"])
+        if layer_type == "Tanh":
+                layers.append(nn.Tanh())
+        elif layer_type == "Sigmoid":
+            layers.append(nn.Sigmoid())
+        else:
+            layers.append(nn.ReLU())
+
 
         # Suggest the dropout rate for the current layer
-        #p = trial.suggest_float("dropout_l{}".format(i), 0.0, 0.2)
-        #p = trial.suggest_categorical("dropout_l{}".format(i), [0.0, 0.1, 0.2, 0.3])
+        #p = trial.suggest_float("dropout_l{}".format(i), 0.0, 0.3)
+        p = trial.suggest_categorical("dropout_l{}".format(i), [0.0, 0.05, 0.1, 0.15, 0.2])
 
-        #layers.append(nn.Dropout(p))
+        layers.append(nn.Dropout(p))
 
         in_features = out_features  # Update input size for the next layer
 
@@ -87,11 +92,13 @@ def get_mnist(trial):
     distance = 2.0  # Distance threshold for filtering data
     data = prepare_dataset(csv_file, dataset_root_directory, distance)
 
-    X, Y, sample_ids, original_distances, feature_names = data
+    X, Y, sample_ids, original_distances = data
     splits = split_data(X, Y, original_distances, sample_ids)
     train_dataset, val_dataset, test_dataset, *split_info = splits
     
-    batch_size = trial.suggest_categorical("batch_size", [4, 8, 16, 32, 64, 128])
+    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128])
+    #batch_size = trial.suggest_int("batch_size", 32, 128)
+
     # Load training data
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size, True
@@ -127,9 +134,11 @@ def objective(trial):
     model = define_model(trial,input_dim, output_dim).to(DEVICE)
 
     # Suggest the optimizer and learning rate
-    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD"])
+    #optimizer_name = "Adam"
+
     lr = 0.01
-    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr, weight_decay=trial.suggest_categorical("weight_decay", [1e-4, 1e-3, 1e-5, 0.0]))
+    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr, weight_decay=1e-4, fused=True)#trial.suggest_categorical("fused", [True, False]))
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', 0.1, 3)
     loss_fn = MaskedMSELoss()  # Loss function
 
@@ -160,16 +169,18 @@ def objective(trial):
                 # Limit validation data
                 #if batch_idx * BATCHSIZE >= N_VALID_EXAMPLES:
                 #    break
-                X_batch, Y_batch = X_batch.to(DEVICE), Y_batch.to(DEVICE)
+                #X_batch, Y_batch = X_batch.to(DEVICE), Y_batch.to(DEVICE)
+                X_batch = X_batch.to(DEVICE)
+
                 
-                output = model(X_batch)
+                output = model(X_batch).cpu()
                 # Get the index of the max log-probability
                 #print(f"Output shape: {output.shape}")
                 #print(f"Y_batch shape: {Y_batch.shape}")
                 val_loss.append(loss_fn(output, Y_batch).item())  # Compute and store loss
 
         # Calculate validation accuracy
-        avg_val_loss = round(np.mean(val_loss), 4)
+        avg_val_loss = np.mean(val_loss)
         #print(f"Epoch {epoch + 1}/{EPOCHS}, Validation Loss: {avg_val_loss:.4f}")
 
         # Report intermediate results to Optuna
@@ -187,8 +198,8 @@ def objective(trial):
 
 if __name__ == "__main__":
     # Create an Optuna study to maximize validation accuracy
-    study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=200, timeout=2400, show_progress_bar=True)  # Run optimization for 100 trials or 600 seconds
+    study = optuna.create_study(direction="minimize", study_name="Echolocation_Regressor_Study")
+    study.optimize(objective, n_trials=200, timeout=None, show_progress_bar=True, n_jobs=1)  # Run optimization for 100 trials or 600 seconds
 
     # Get statistics about the study
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])

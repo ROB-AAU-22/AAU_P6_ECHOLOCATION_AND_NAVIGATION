@@ -55,23 +55,21 @@ class Regressor(nn.Module):
         """
         super().__init__()
         print(f"regressor layer_type: {layer_type}")
-        if layer_type == "Tanh":
-            layers = [nn.Linear(input_dim, hidden_dim), nn.Tanh()]
-        elif layer_type == "Sigmoid":
-            layers = [nn.Linear(input_dim, hidden_dim), nn.Sigmoid()]
-        else:
-            layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
-             
-        for _ in range(num_layers):
+        layers = []
+        in_features = input_dim
+        #dropout = [0.2274, 0.2879, 0.0692]
+        for i, dim in enumerate(hidden_dim):
+            out_features = dim
+            layers.append(nn.Linear(in_features, out_features))
             if layer_type == "Tanh":
-                layers += [nn.Linear(hidden_dim, int(hidden_dim)), nn.Tanh()]
+                layers.append(nn.Tanh())
             elif layer_type == "Sigmoid":
-                layers += [nn.Linear(hidden_dim, int(hidden_dim)), nn.Sigmoid()]
+                layers.append(nn.Sigmoid())
             else:
-                layers += [nn.Linear(hidden_dim, int(hidden_dim)), nn.ReLU()]
-            #layers.append(nn.Dropout(0.3))
-            #hidden_dim = int(hidden_dim*2)
-        layers.append(nn.Linear(hidden_dim, output_dim))
+                layers.append(nn.ReLU())
+            #layers.append(nn.Dropout(dropout[i]))
+            in_features = out_features  # Update input size for the next layer
+        layers.append(nn.Linear(in_features, output_dim))
         self.model = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -81,21 +79,20 @@ class Classifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, layer_type):
         super().__init__()
         print(f"classifier layer_type: {layer_type}")
-        if layer_type == "Tanh":
-            layers = [nn.Linear(input_dim, hidden_dim), nn.Tanh()]
-        elif layer_type == "Sigmoid":
-            layers = [nn.Linear(input_dim, hidden_dim), nn.Sigmoid()]
-        else:
-            layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
-             
+        layers = []
+        in_features = input_dim
         for _ in range(num_layers):
+            out_features = hidden_dim
+            layers.append(nn.Linear(in_features, out_features))
             if layer_type == "Tanh":
-                layers += [nn.Linear(hidden_dim, hidden_dim), nn.Tanh()]
+                layers.append(nn.Tanh())
             elif layer_type == "Sigmoid":
-                layers += [nn.Linear(hidden_dim, hidden_dim), nn.Sigmoid()]
+                layers.append(nn.Sigmoid())
             else:
-                layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
-            #layers.append(nn.Dropout(0.2))
+                layers.append(nn.ReLU())
+            #layers.append(nn.Dropout(0.3))
+            #hidden_dim = int(hidden_dim*2)
+            in_features = out_features  # Update input size for the next layer
             
         layers.append(nn.Linear(hidden_dim, output_dim))
         layers.append(nn.Sigmoid())

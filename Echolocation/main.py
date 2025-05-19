@@ -64,7 +64,7 @@ def main():
 
         # train model
         print("Training model...")
-        mainTraining.model_training(dataset_root_path, chosen_dataset)
+        mainTraining.main_training(dataset_root_path, chosen_dataset)
         print("Model training complete.")
 
     elif train_predict_input == "p" or str(train_predict_input) == "1":
