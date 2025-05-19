@@ -346,7 +346,7 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
 
     start_multiprocessing_plotting(ground_truth_test, predicted_test, classifcation_list, original_distances_test,
                                    NUM_EPOCHS, reg_results['hyperparams']['num_layers'], cartesian_folder,
-                                   scan_index_folder, CLASSIFICATION_THRESHOLDS, dataset_iter, sample_ids_test)
+                                   scan_index_folder, CLASSIFICATION_THRESHOLDS, dataset_iter, sample_ids_test, distance)
 
     #acc = ((classifications > best_threshold) == (classifications_true <= distance)).mean()
     print(f"Classification Accuracy: {round(accuracy,4)}")

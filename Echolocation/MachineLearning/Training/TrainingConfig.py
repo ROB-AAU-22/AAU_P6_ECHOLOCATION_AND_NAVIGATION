@@ -10,7 +10,7 @@ REGRESSOR_LEARNING_RATES = [0.01]
 REGRESSOR_HIDDEN_DIMS = [[256,256]]
 REGRESSOR_BATCH_SIZES = [64]
 REGRESSOR_NUM_LAYERS_LIST = [2]
-REGRESSOR_WEIGHT_DECAYS = [0, 1e-5, 1e-4]
+REGRESSOR_WEIGHT_DECAYS = [0, 1e-5]
 REGRESSOR_LAYER_TYPE = ["ReLU"]#, "Tanh"]
 REGRESSOR_OPTIMIZER = ["Adam", "AdamW"]#["Adadelta", "Adafactor", "Adagrad", "Adam", "AdamW", "Adamax", "ASGD", "NAdam", "RAdam", "RMSprop", "Rprop", "SGD"]
 

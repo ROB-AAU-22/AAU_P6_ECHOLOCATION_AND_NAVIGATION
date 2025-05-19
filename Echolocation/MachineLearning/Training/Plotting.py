@@ -21,14 +21,14 @@ def plot_worker(queue, worker_id):
             break
         try:
             task_type, data = task
-            i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder, best_threshold, chosen_dataset, id = data
+            i, Y_true_i, Y_pred_i, classifications_i, original_gt_i, num_epochs, num_layers, lidar_plots_folder, best_threshold, chosen_dataset, id, distance = data
 
             fig, ax = plt.subplots(figsize=(8, 8) if task_type == 'cartesian' else (10, 6), dpi=DPI)
             if task_type == 'cartesian':
                 #print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
                 gt_x, gt_y = polar_to_cartesian(Y_true_i)
                 pred_x, pred_y = polar_to_cartesian(Y_pred_i)
-                ignored_gt = original_gt_i > DISTANCE_THRESHOLD
+                ignored_gt = original_gt_i > distance
 
                 ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt_i)
                 ax.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o', label='Ignored GT', alpha=0.7, zorder=1)
@@ -46,9 +46,13 @@ def plot_worker(queue, worker_id):
                 # draw an arrow vector from origin to middle point(s)
                 plt.arrow(0, 0, gt_x[540], gt_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
                 plt.arrow(0, 0, pred_x[540], pred_y[540], head_width=0.1, head_length=0.2, fc='black', ec='black', alpha=1, zorder=4)
-                #print(f"Classifications_i: {classifications_i}")
+                
+                
                 classified_as_object = classifications_i > best_threshold
+
                 classified_as_no_object = ~classified_as_object
+                #print(f"classified_as_no_object: {classified_as_no_object}\n")
+                #print(f"ignored_gt: {ignored_gt}\n")
                 ax.scatter(pred_x[classified_as_object], pred_y[classified_as_object], color='green', marker='o', s=30, label='Object', zorder=6)
                 ax.scatter(pred_x[classified_as_no_object], pred_y[classified_as_no_object], color='orange', marker='o', s=30, label='Not Object', zorder=5)
 
@@ -62,12 +66,12 @@ def plot_worker(queue, worker_id):
                 #print(f"Worker {worker_id} plotting scan index LiDAR for sample {i}...")
                 ax.plot(Y_true_i, label="Ground Truth LiDAR", marker="o")
                 #ax.plot(Y_pred_i, label="Predicted LiDAR", linestyle="--", marker="x")
-                ignored_gt = original_gt_i > DISTANCE_THRESHOLD
+                ignored_gt = original_gt_i > distance
                 ax.scatter(np.arange(len(original_gt_i))[ignored_gt], original_gt_i[ignored_gt], color='red', marker='o', label='Ignored GT')
                 classified_as_object = classifications_i > best_threshold
                 classified_as_no_object = ~classified_as_object
-                ax.scatter(np.arange(len(Y_pred_i))[classified_as_object], Y_pred_i[classified_as_object], color='green', marker='o', s=50, label='Object')
-                ax.scatter(np.arange(len(Y_pred_i))[classified_as_no_object], Y_pred_i[classified_as_no_object], color='orange', marker='o', s=50, label='Not Object')
+                ax.scatter(np.arange(len(Y_pred_i))[classified_as_object], Y_pred_i[classified_as_object], color='green', marker='o', s=50, label='Object', zorder=6)
+                ax.scatter(np.arange(len(Y_pred_i))[classified_as_no_object], Y_pred_i[classified_as_no_object], color='orange', marker='o', s=50, label='Not Object', zorder=5)
                 ax.set_xlabel("Scan Index")
                 ax.set_ylabel("Distance (m)")
                 ax.set_title(f"{id}")
@@ -86,7 +90,7 @@ def plot_worker(queue, worker_id):
             print(f"Error in worker {worker_id} for task {i}: {e}")
             raise e
 
-def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_distances_test, num_epochs, num_layers, cartesian_folder, scan_index_folder, best_threshold, chosen_dataset, ids):
+def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_distances_test, num_epochs, num_layers, cartesian_folder, scan_index_folder, best_threshold, chosen_dataset, ids, distance):
     start_time = time.time()
     num_workers = int(cpu_count()-4) if cpu_count() > 1 else 1
     print(f"Using {num_workers} multiprocessing workers for plotting")
@@ -97,8 +101,8 @@ def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_dis
         w.start()
 
     for i in range(len(Y_true)):
-        task_queue.put(('cartesian', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, cartesian_folder, best_threshold, chosen_dataset, ids[i])))
-        task_queue.put(('scan_index', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, scan_index_folder, best_threshold, chosen_dataset, ids[i])))
+        task_queue.put(('cartesian', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, cartesian_folder, best_threshold, chosen_dataset, ids[i], distance)))
+        task_queue.put(('scan_index', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, scan_index_folder, best_threshold, chosen_dataset, ids[i], distance)))
 
     for _ in range(num_workers):
         task_queue.put(None)

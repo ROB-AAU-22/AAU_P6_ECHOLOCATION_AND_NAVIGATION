@@ -13,7 +13,7 @@ from MachineLearning.Prediction import Predict
 
 
 def main():
-    train_predict_input = input("Would you like to train or predict? (t/p) ").strip().lower()
+    train_predict_input = str(input("Would you like to train or predict? (t/p) ").strip().lower())
     if train_predict_input == "t" or str(train_predict_input) == "0":
         dataset_root_path = os.path.join("./Echolocation/Data", "dataset")
         chosen_dataset = None
@@ -42,7 +42,7 @@ def main():
 
         # optional to extract features
         extract_features_input = input("Would you like to extract features? (y/n) ").strip().lower()
-        if extract_features_input == "y" or extract_features_input == 0:
+        if extract_features_input == "y" or extract_features_input == "1":
             print("Extracting features...")
             FeatureExtractionScript.extract_features(dataset_root_path, chosen_dataset)
             print("Normalizing features...")
