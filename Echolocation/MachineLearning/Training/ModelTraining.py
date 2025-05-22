@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from MachineLearning.Training.TrainingConfig import PATIENCE, DISTANCE_THRESHOLD
+from MachineLearning.Training.TrainingConfig import PATIENCE, CLASSIFICATION_THRESHOLD
 from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
 
@@ -252,13 +252,13 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
 
         # Validation phase
         avg_val_loss, val_preds, val_labels = validate_one_epoch_classifier(model, val_loader, loss_fn, device)
+        y_val_preds_thresholded = (val_preds > CLASSIFICATION_THRESHOLD).astype(int)
 
-        classification_accuracy = ((val_preds > 0.5) == (val_labels)).mean()
+        classification_accuracy = ((y_val_preds_thresholded) == (val_labels)).mean()
 
         print(
             f"[Classifier] Epoch {epoch + 1}/{epochs}, Train Loss: {avg_training_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Classification Accuracy: {classification_accuracy:.4f}")
 
-        y_val_preds_thresholded = (val_preds > 0.5).astype(int)
         # Compute classification metrics
         precision = precision_score(val_labels, y_val_preds_thresholded, zero_division=0)
         recall = recall_score(val_labels, y_val_preds_thresholded, zero_division=0)
@@ -342,10 +342,11 @@ def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
             preds_list.append(outputs)
             targets_list.append(Yb)
     y_val_preds = outputs.numpy()
-    y_val_labels_flat = ~np.isnan(y_val_labels.cpu().numpy())
-    y_val_labels_thresholded = (y_val_labels_flat).astype(int)
+    #y_val_labels_flat = ~np.isnan(y_val_labels.cpu().numpy())
+    #y_val_labels_thresholded = (y_val_labels_flat).astype(int)
+    y_val_labels_thresholded = (y_val_labels.cpu().numpy() < 2.0).astype(int)
 
-    y_val_preds_thresholded = (y_val_preds>0.5).astype(int)
+    y_val_preds_thresholded = (y_val_preds>CLASSIFICATION_THRESHOLD).astype(int)
     
     #print(f"y_val_preds_thresholded: {y_val_preds_thresholded}")
     #print(f"y_val_labels_thresholded: {y_val_labels_thresholded}")
@@ -362,9 +363,26 @@ def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
         f"  Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1_classifier:.4f}\n"
     )
 
-    return y_val_preds_thresholded, y_val_labels_thresholded, torch.cat(preds_list).numpy(), torch.cat(targets_list)
+    return y_val_preds_thresholded, y_val_labels_thresholded, torch.cat(preds_list).numpy(), torch.cat(targets_list), y_val_preds
 
 def compute_error_metrics(Y_true, Y_pred, distance):
+    """
+    Compute error metrics (MAE, RMSE, MRE) between true and predicted values within a specified distance range.
+    Parameters:
+        Y_true (array-like): Ground truth (actual) values.
+        Y_pred (array-like): Predicted values.
+        distance (float): Upper bound for the range bin (lower bound is 0).
+    Returns:
+        dict: A dictionary where each key is a string representing the range bin (e.g., "0_10"), and each value is another dictionary containing:
+            - 'mae': Mean Absolute Error for the bin.
+            - 'rmse': Root Mean Squared Error for the bin.
+            - 'mre': Mean Relative Error for the bin.
+    Notes:
+        - The function currently supports only a single range bin from 0 to `distance`.
+        - If there are no samples in the bin, that bin is omitted from the results.
+        - A small epsilon (1e-10) is added to the denominator in MRE calculation to avoid division by zero.
+    """
+    
     range_bins = [(0, distance)]
     results = {f"{low}_{high}": {'y_true': [], 'y_pred': []} for low, high in range_bins}
 
@@ -396,6 +414,20 @@ def compute_error_metrics(Y_true, Y_pred, distance):
 
 
 def compute_permutation_importance(model, X_val, Y_val, loss_fn, device):
+    """
+    Computes permutation feature importance for a given model and validation dataset.
+    Permutation importance measures the increase in the loss function when the values of each feature are randomly shuffled,
+    which breaks the relationship between the feature and the target. A higher increase in loss indicates a more important feature.
+    Args:
+        model (torch.nn.Module): The trained PyTorch model to evaluate.
+        X_val (np.ndarray): Validation input features of shape (n_samples, n_features).
+        Y_val (np.ndarray): Validation target values.
+        loss_fn (callable): Loss function used to evaluate model performance.
+        device (torch.device): Device on which computations are performed (e.g., 'cpu' or 'cuda').
+    Returns:
+        list: A list of importance scores, one for each feature, representing the increase in loss when that feature is permuted.
+    """
+    
     model.eval()
     base_preds, _ = model(torch.tensor(X_val, dtype=torch.float32).to(device))
     base_loss = loss_fn(base_preds, torch.tensor(Y_val, dtype=torch.float32).to(device)).item()

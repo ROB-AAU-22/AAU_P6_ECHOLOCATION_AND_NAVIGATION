@@ -3,3 +3,5 @@
 /Echolocation/FeatureExtraction/ExtractedFeatures
 **/__pycache__/
 /Echolocation/Models
+/Echolocation/Models
+*.pth

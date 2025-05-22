@@ -11,18 +11,28 @@ from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, DISTANCE
 
 def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_THRESHOLD):
     """
-        Build a dataset for ML using normalized audio features from a CSV file and LiDAR scans from dataset_2 structure.
+    Builds a dataset from a CSV file and corresponding LiDAR JSON files.
+    This function reads a CSV file containing feature data and associates each sample with a LiDAR distance data JSON file.
+    It processes feature columns (including list-like string values), loads and thresholds LiDAR distance data, and returns
+    arrays suitable for machine learning tasks.
+    Args:
+        csv_file (str): Path to the CSV file containing feature data. The CSV must include a 'filename' column.
+        dataset_root (str): Root directory where sample folders and LiDAR JSON files are located.
+        distance_threshold (float, optional): Maximum allowed LiDAR distance. Distances above this value are replaced with NaN.
+            Defaults to DISTANCE_THRESHOLD.
+    Returns:
+        tuple:
+            - X (np.ndarray): Array of feature vectors for each sample.
+            - Y (np.ndarray): Array of LiDAR distance vectors (labels) for each sample.
+            - sample_ids (list): List of sample identifiers (filenames).
+            - feature_names_full (list): List of feature names corresponding to columns in X.
+            - original_distances (list): List of original (unthresholded) LiDAR distance arrays for each sample.
+    Notes:
+        - The function skips samples if the corresponding LiDAR JSON file is missing or cannot be loaded.
+        - Feature columns containing list-like strings (e.g., "[1.0, 2.0]") are expanded into multiple features.
+        - Requires global variables DISTANCE_THRESHOLD and DISTANCE_THRESHOLD_ENABLED to be defined.
+    """
 
-        Parameters:
-          - csv_file: Path to features_all_normalized.csv.
-          - dataset_root: Root folder containing dataset_2.
-
-        Returns:
-          - X: NumPy array of shape (n_samples, n_audio_features)
-          - Y: NumPy array of shape (n_samples, n_lidar_points)
-          - sample_ids: List of sample indices (timestamps)
-          - original_distances: List of original LiDAR distances for plotting
-        """
     # Read CSV file into a DataFrame
     df = pd.read_csv(csv_file)
 
@@ -97,7 +107,8 @@ def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_T
             original_distances.append(lidar_vector.copy())
             # Apply distance threshold, replacing values above it with NaN
             if DISTANCE_THRESHOLD_ENABLED:
-                lidar_vector[lidar_vector > distance_threshold] = np.nan
+                lidar_vector[lidar_vector > (distance_threshold)] = np.nan
+                #lidar_vector[lidar_vector > (distance_threshold)] = 2.1
 
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
