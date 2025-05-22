@@ -79,7 +79,7 @@ def split_data(X, Y, original_distances, sample_ids):
     return (AudioLidarDataset(X_train, Y_train),
             AudioLidarDataset(X_val, Y_val),
             AudioLidarDataset(X_test, Y_test),
-            sid_test, od_test, Y_test)
+            sid_test, od_test, Y_test, od_train, od_val)
 
 def run_regressor_grid_search(train_dataset, val_dataset, test_dataset, input_dim, output_dim, device, dataset_iter, distance_folder, chosen_dataset):
     """
@@ -216,31 +216,34 @@ def run_classifier_grid_search(reg_results, output_dim, device, dataset_iter, di
                 for nl in CLASSIFIER_NUM_LAYERS_LIST:
                     for wd in CLASSIFIER_WEIGHT_DECAYS:
                         for lt in CLASSIFIER_LAYER_TYPE:
-                            print(f"\nTraining Classifier: hidden={hd}, batch={bs}, layers={nl}, type={lt}, decay={wd}")
-                            model = Classifier(input_dim=output_dim, hidden_dim=hd, output_dim=output_dim,
-                                               num_layers=nl, layer_type=lt).to(device)
-                            opt = optim.Adam(model.parameters(), lr=lr, weight_decay=wd, fused=True)
-                            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 3)
+                            for ot in CLASSIFIER_OPTIMIZER:
+                                print(f"\nTraining Classifier: hidden={hd}, batch={bs}, layers={nl}, type={lt}, decay={wd}, optimizer={ot}")
+                                model = Classifier(input_dim=output_dim, hidden_dim=hd, output_dim=output_dim,
+                                                num_layers=nl, layer_type=lt).to(device)
+                                if ot == "SGD":
+                                    lr = 0.1
+                                opt = getattr(optim, ot)(model.parameters(), lr=lr, weight_decay=wd, fused=True)
+                                scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 3)
 
-                            model, val_loss = train_classifier(
-                                model, DataLoader(train_data, bs, True), DataLoader(val_data, bs, True), #DataLoader(val_data, bs, False)
-                                opt, loss_fn, device, NUM_EPOCHS, scheduler)
+                                model, val_loss = train_classifier(
+                                    model, DataLoader(train_data, bs, True), DataLoader(val_data, bs, True), #DataLoader(val_data, bs, False)
+                                    opt, loss_fn, device, NUM_EPOCHS, scheduler)
 
-                            params = {"input_dim": output_dim, "output_dim": output_dim, "lr": lr,
-                                               "hidden_dim": hd, "batch_size": bs, "num_epochs": NUM_EPOCHS,
-                                               "num_layers": nl, "layer_type": lt, "weight_decay": wd}
-                            
-                            print(f"Val Accuracy: {val_loss:.4f}")
-                            if val_loss < best_loss:
-                                print(f"New best loss: {val_loss:.4f}")
-                                best_loss = val_loss
-                                best_params = params
-                                best_state = model.state_dict()
+                                params = {"input_dim": output_dim, "output_dim": output_dim, "lr": lr,
+                                                "hidden_dim": hd, "batch_size": bs, "num_epochs": NUM_EPOCHS,
+                                                "num_layers": nl, "layer_type": lt, "weight_decay": wd, "optimizer": ot}
+                                
+                                print(f"Val loss: {val_loss:.4f}")
+                                if val_loss < best_loss:
+                                    print(f"New best loss: {val_loss:.4f}")
+                                    best_loss = val_loss
+                                    best_params = params
+                                    best_state = model.state_dict()
 
-                            path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, distance_folder, "classifier_results.txt")
-                            log = f"Classifier Hyperparameters: {params}\n  Best classifier Loss: {val_loss:.4f}\n\n"
-                            with open(path, 'a') as f:
-                                f.write(log)
+                                path = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, distance_folder, "classifier_results.txt")
+                                log = f"Classifier Hyperparameters: {params}\n  Best classifier Loss: {val_loss:.4f}\n\n"
+                                with open(path, 'a') as f:
+                                    f.write(log)
 
     if best_params is None:
         return None
@@ -283,23 +286,23 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
         - Prints evaluation metrics such as MAE, RMSE, MRE, and classification accuracy.
         - Logs the completion of model evaluation and saving process.
     """
-    sample_ids_test, original_distances_test, Y_test = split_info
-    best_threshold = CLASSIFICATION_THRESHOLDS[0]
+    sample_ids_test, original_distances_test, Y_test, original_distances_train, original_distances_val = split_info
+    best_threshold = CLASSIFICATION_THRESHOLD
     predicted_test, ground_truth_test = evaluate_regressor(reg_results['model'], reg_results['test_loader'], device)
-    classifications, classifications_true, classifcation_list, classifcation_true_list = evaluate_classifier(
+    classifications, classifications_true, classifcation_list, classifcation_true_list, classifciation_preds_score = evaluate_classifier(
         cls_results['model'], device, predicted_test, ground_truth_test, cls_results['hyperparams']['batch_size'])
 
     metrics_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, distance_folder, "evaluation_metrics")
     os.makedirs(metrics_folder, exist_ok=True)
 
     y_class_targets = classifications_true.flatten()
-    y_class_probs = classifications.flatten()
+    y_class_probs = classifciation_preds_score.flatten()
 
     prec_score, rec_score, f1, accuracy = plot_precision_recall_curve(y_class_targets, y_class_probs,
                                 save_path=os.path.join(metrics_folder, "precision_recall_curve.png"))
     cm = plot_confusion_matrix_all(y_class_targets, y_class_probs, threshold=best_threshold,
                               save_path=os.path.join(metrics_folder, "confusion_matrix.png"))
-    plot_roc_curve(y_class_targets, y_class_probs, save_path=os.path.join(metrics_folder, "roc_curve.png"))
+    roc_auc, thresholds = plot_roc_curve(y_class_targets, y_class_probs, save_path=os.path.join(metrics_folder, "roc_curve.png"))
 
     print("Saved evaluation plots.")
 
@@ -341,12 +344,14 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
         f.write(f"\n\nBest Classifier Hyperparameters: {cls_results['hyperparams']}")
         f.write(f"\n  Best Validation Loss: {round(cls_results['val_loss'],4)}")
         f.write(f"\n  Precision: {round(prec_score,4)}, Recall: {round(rec_score,4)}, F1: {round(f1,4)}, Accuracy: {round(accuracy,4)}")
-        f.write(f"\n  FPR: {fpr:.4f}, FNR: {fnr:.4f}\n")
+        f.write(f"\n  FPR: {fpr:.4f}, FNR: {fnr:.4f}, AUC: {roc_auc:.4f}")
+        f.write(f"\n  Best Threshold: {thresholds}\n")
     
 
-    start_multiprocessing_plotting(ground_truth_test, predicted_test, classifcation_list, original_distances_test,
-                                   NUM_EPOCHS, reg_results['hyperparams']['num_layers'], cartesian_folder,
-                                   scan_index_folder, CLASSIFICATION_THRESHOLDS, dataset_iter, sample_ids_test, distance)
+    if False:
+        start_multiprocessing_plotting(ground_truth_test, predicted_test, classifcation_list, original_distances_test,
+                                    NUM_EPOCHS, reg_results['hyperparams']['num_layers'], cartesian_folder,
+                                    scan_index_folder, CLASSIFICATION_THRESHOLD, dataset_iter, sample_ids_test, distance)
 
     #acc = ((classifications > best_threshold) == (classifications_true <= distance)).mean()
     print(f"Classification Accuracy: {round(accuracy,4)}")

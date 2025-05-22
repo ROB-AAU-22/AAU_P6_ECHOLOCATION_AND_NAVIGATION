@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
@@ -11,10 +13,16 @@ class MaskedMSELoss(nn.Module):
 
     def forward(self, outputs, targets):
         # Mask values where targets are NaN or greater than distance_threshold
+        #outputs = outputs.flatten()
+        #targets = targets.flatten()
+
         if DISTANCE_THRESHOLD_ENABLED:
             mask = ~torch.isnan(targets)
             outputs = outputs[mask]
             targets = targets[mask]
+            pass
+
+        
         loss = self.mse_loss(outputs, targets)
         return loss.mean()
 
@@ -90,7 +98,7 @@ class Classifier(nn.Module):
                 layers.append(nn.Sigmoid())
             else:
                 layers.append(nn.ReLU())
-            #layers.append(nn.Dropout(0.3))
+            #layers.append(nn.Dropout(0.1))
             #hidden_dim = int(hidden_dim*2)
             in_features = out_features  # Update input size for the next layer
             

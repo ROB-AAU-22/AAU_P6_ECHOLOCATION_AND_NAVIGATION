@@ -27,7 +27,7 @@ from MachineLearning.Training.ModelFunctions import MaskedMSELoss
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define constants for batch size, number of classes, and dataset paths
-EPOCHS = 200  # Number of training epochs
+EPOCHS = 50  # Number of training epochs
 
 
 
@@ -50,11 +50,11 @@ def define_model(trial,input_dim, output_dim):
     for i in range(n_layers):
         # Suggest the number of units in the current layer
         #out_features = trial.suggest_int("hidden_dim_{}".format(i), 32, 512)
-        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [64, 128, 256, 512])
+        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [128, 256, 512, 1024, 2048])
         #print(f"Layer {i}: {in_features} -> {out_features}")
         layers.append(nn.Linear(in_features, out_features))
         
-        layer_type = trial.suggest_categorical("layer_type_{}".format(i), ["ReLU", "Tanh", "Sigmoid"])
+        layer_type = "ReLU" #trial.suggest_categorical("layer_type_{}".format(i), ["ReLU", "Tanh", "Sigmoid"])
         if layer_type == "Tanh":
                 layers.append(nn.Tanh())
         elif layer_type == "Sigmoid":
@@ -89,7 +89,7 @@ def get_mnist(trial):
     # split data into training and validation sets
     csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures/echolocation-wide-long-all/features_all_normalized.csv")
     dataset_root_directory = os.path.join("./Echolocation/Data/dataset/echolocation-wide-long-all")
-    distance = 2.0  # Distance threshold for filtering data
+    distance = 2.0 #4.95  # Distance threshold for filtering data
     data = prepare_dataset(csv_file, dataset_root_directory, distance)
 
     X, Y, sample_ids, original_distances = data
@@ -134,11 +134,11 @@ def objective(trial):
     model = define_model(trial,input_dim, output_dim).to(DEVICE)
 
     # Suggest the optimizer and learning rate
-    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD"])
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "AdamW"])
     #optimizer_name = "Adam"
 
     lr = 0.01
-    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr, weight_decay=1e-4, fused=True)#trial.suggest_categorical("fused", [True, False]))
+    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr, weight_decay=trial.suggest_categorical("weight_decay", [0, 1e-5, 1e-4]), fused=True)#trial.suggest_categorical("fused", [True, False]))
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', 0.1, 3)
     loss_fn = MaskedMSELoss()  # Loss function
 
@@ -156,6 +156,7 @@ def objective(trial):
             optimizer.zero_grad()
             output = model(X_batch)
             
+            # if last epoch, write output to file
             loss = loss_fn(output, Y_batch)  # Negative log-likelihood loss
             loss.backward()
             optimizer.step()
@@ -177,6 +178,8 @@ def objective(trial):
                 # Get the index of the max log-probability
                 #print(f"Output shape: {output.shape}")
                 #print(f"Y_batch shape: {Y_batch.shape}")
+                # create text file to save the output
+                
                 val_loss.append(loss_fn(output, Y_batch).item())  # Compute and store loss
 
         # Calculate validation accuracy
@@ -199,7 +202,7 @@ def objective(trial):
 if __name__ == "__main__":
     # Create an Optuna study to maximize validation accuracy
     study = optuna.create_study(direction="minimize", study_name="Echolocation_Regressor_Study")
-    study.optimize(objective, n_trials=200, timeout=None, show_progress_bar=True, n_jobs=1)  # Run optimization for 100 trials or 600 seconds
+    study.optimize(objective, n_trials=1, timeout=None, show_progress_bar=True, n_jobs=1)  # Run optimization for 100 trials or 600 seconds
 
     # Get statistics about the study
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
