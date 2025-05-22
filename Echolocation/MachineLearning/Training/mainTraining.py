@@ -225,13 +225,13 @@ def run_classifier_grid_search(reg_results, output_dim, device, dataset_iter, di
                                 opt = getattr(optim, ot)(model.parameters(), lr=lr, weight_decay=wd, fused=True)
                                 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', 0.1, 3)
 
-                                model, val_loss = train_classifier(
+                                model, val_loss, best_threshold = train_classifier(
                                     model, DataLoader(train_data, bs, True), DataLoader(val_data, bs, True), #DataLoader(val_data, bs, False)
                                     opt, loss_fn, device, NUM_EPOCHS, scheduler)
 
                                 params = {"input_dim": output_dim, "output_dim": output_dim, "lr": lr,
                                                 "hidden_dim": hd, "batch_size": bs, "num_epochs": NUM_EPOCHS,
-                                                "num_layers": nl, "layer_type": lt, "weight_decay": wd, "optimizer": ot}
+                                                "num_layers": nl, "layer_type": lt, "weight_decay": wd, "optimizer": ot, "threshold": best_threshold}
                                 
                                 print(f"Val loss: {val_loss:.4f}")
                                 if val_loss < best_loss:
@@ -287,10 +287,10 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
         - Logs the completion of model evaluation and saving process.
     """
     sample_ids_test, original_distances_test, Y_test, original_distances_train, original_distances_val = split_info
-    best_threshold = CLASSIFICATION_THRESHOLD
+    best_threshold = cls_results['hyperparams']['threshold']
     predicted_test, ground_truth_test = evaluate_regressor(reg_results['model'], reg_results['test_loader'], device)
     classifications, classifications_true, classifcation_list, classifcation_true_list, classifciation_preds_score = evaluate_classifier(
-        cls_results['model'], device, predicted_test, ground_truth_test, cls_results['hyperparams']['batch_size'])
+        cls_results['model'], device, predicted_test, ground_truth_test, cls_results['hyperparams']['batch_size'], best_threshold)
 
     metrics_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, distance_folder, "evaluation_metrics")
     os.makedirs(metrics_folder, exist_ok=True)
@@ -302,7 +302,7 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
                                 save_path=os.path.join(metrics_folder, "precision_recall_curve.png"))
     cm = plot_confusion_matrix_all(y_class_targets, y_class_probs, threshold=best_threshold,
                               save_path=os.path.join(metrics_folder, "confusion_matrix.png"))
-    roc_auc, thresholds = plot_roc_curve(y_class_targets, y_class_probs, save_path=os.path.join(metrics_folder, "roc_curve.png"))
+    roc_auc = plot_roc_curve(y_class_targets, y_class_probs, save_path=os.path.join(metrics_folder, "roc_curve.png"))
 
     print("Saved evaluation plots.")
 
@@ -345,10 +345,10 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
         f.write(f"\n  Best Validation Loss: {round(cls_results['val_loss'],4)}")
         f.write(f"\n  Precision: {round(prec_score,4)}, Recall: {round(rec_score,4)}, F1: {round(f1,4)}, Accuracy: {round(accuracy,4)}")
         f.write(f"\n  FPR: {fpr:.4f}, FNR: {fnr:.4f}, AUC: {roc_auc:.4f}")
-        f.write(f"\n  Best Threshold: {thresholds}\n")
+        f.write(f"\n  Best Threshold: {best_threshold:.4f}\n")
     
 
-    if False:
+    if True:
         start_multiprocessing_plotting(ground_truth_test, predicted_test, classifcation_list, original_distances_test,
                                     NUM_EPOCHS, reg_results['hyperparams']['num_layers'], cartesian_folder,
                                     scan_index_folder, CLASSIFICATION_THRESHOLD, dataset_iter, sample_ids_test, distance)

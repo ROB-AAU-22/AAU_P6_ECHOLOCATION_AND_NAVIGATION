@@ -6,7 +6,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from MachineLearning.Training.TrainingConfig import PATIENCE, CLASSIFICATION_THRESHOLD
 from MachineLearning.Training.ModelFunctions import MaskedMSELoss, AudioLidarDataset
-from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, accuracy_score, roc_curve
 
 # ---------------------------
 # Training Functions
@@ -252,7 +252,10 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
 
         # Validation phase
         avg_val_loss, val_preds, val_labels = validate_one_epoch_classifier(model, val_loader, loss_fn, device)
-        y_val_preds_thresholded = (val_preds > CLASSIFICATION_THRESHOLD).astype(int)
+        fpr, tpr, thresholds = roc_curve(val_labels, val_preds)
+        best_threshold_index = np.argmax(tpr - fpr)
+        best_threshold = thresholds[best_threshold_index]
+        y_val_preds_thresholded = (val_preds > best_threshold).astype(int)
 
         classification_accuracy = ((y_val_preds_thresholded) == (val_labels)).mean()
 
@@ -283,7 +286,7 @@ def train_classifier(model, train_loader, val_loader, optimizer, loss_fn, device
                 print("Early stopping triggered.")
                 break
 
-    return model, avg_val_loss
+    return model, avg_val_loss, best_threshold
 
 
 def evaluate_regressor(model, dataloader, device):
@@ -310,7 +313,7 @@ def evaluate_regressor(model, dataloader, device):
             targets_list.append(Y_batch)
     return torch.cat(preds_list), torch.cat(targets_list)
 
-def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
+def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size, threshold):
     """
     Evaluates the performance of a classifier model on validation data.
     Args:
@@ -345,8 +348,8 @@ def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
     #y_val_labels_flat = ~np.isnan(y_val_labels.cpu().numpy())
     #y_val_labels_thresholded = (y_val_labels_flat).astype(int)
     y_val_labels_thresholded = (y_val_labels.cpu().numpy() < 2.0).astype(int)
-
-    y_val_preds_thresholded = (y_val_preds>CLASSIFICATION_THRESHOLD).astype(int)
+    
+    y_val_preds_thresholded = (y_val_preds>threshold).astype(int)
     
     #print(f"y_val_preds_thresholded: {y_val_preds_thresholded}")
     #print(f"y_val_labels_thresholded: {y_val_labels_thresholded}")

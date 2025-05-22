@@ -26,7 +26,7 @@ CLASSIFIER_LAYER_TYPE = ["ReLU"]  # List of activation functions to use in the c
 CLASSIFIER_OPTIMIZER = ["Adam"]  # List of optimizers to try for the classifier
 
 
-CLASSIFICATION_THRESHOLD = 0.4
+CLASSIFICATION_THRESHOLD = 0.42
 PATIENCE = 10
 PLOT_DPI = 200
 NUM_EPOCHS = 200

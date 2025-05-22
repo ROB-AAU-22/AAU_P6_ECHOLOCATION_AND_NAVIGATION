@@ -63,6 +63,6 @@ def plot_roc_curve(y_true, y_probs, save_path=None):
     plt.close()
     
     # calculate best threshold
-    best_threshold_index = np.argmax(tpr - fpr)
-    best_threshold = thresholds[best_threshold_index]
-    return roc_auc, best_threshold
+    #best_threshold_index = np.argmax(tpr - fpr)
+    #best_threshold = thresholds[best_threshold_index]
+    return roc_auc#, best_threshold
