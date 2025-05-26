@@ -103,12 +103,15 @@ def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_T
                 lidar_data = json.load(f)
             # Extract LiDAR distances
             lidar_vector = np.array(lidar_data["LiDAR_distance"], dtype=float)
+            # round distances
+            #lidar_vector = np.round(lidar_vector, 2)
+            
             # Save original distances for later analysis
             original_distances.append(lidar_vector.copy())
             # Apply distance threshold, replacing values above it with NaN
             if DISTANCE_THRESHOLD_ENABLED:
-                lidar_vector[lidar_vector > (distance_threshold)] = np.nan
-                #lidar_vector[lidar_vector > (distance_threshold)] = 2.1
+                #lidar_vector[lidar_vector > (distance_threshold)] = np.nan
+                lidar_vector[lidar_vector > (distance_threshold)] = (distance_threshold+0.1)
 
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
@@ -132,7 +135,8 @@ class ClassifierDataset(torch.utils.data.Dataset):
         #print(f"train preds: {predicted_distances}")
         #print(f"train targets: {original_distances}")
         self.X = np.float32(predicted_distances)#.float()
-        self.Y = np.float32(~np.isnan(original_distances))#.float()
+        #self.Y = np.float32(~np.isnan(original_distances))#.float()
+        self.Y = np.float32(original_distances<2.1)
         #self.Y = original_distances  # .float()
 
 

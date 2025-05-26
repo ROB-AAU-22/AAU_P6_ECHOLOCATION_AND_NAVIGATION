@@ -27,7 +27,8 @@ from MachineLearning.Training.ModelFunctions import MaskedMSELoss
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define constants for batch size, number of classes, and dataset paths
-EPOCHS = 50  # Number of training epochs
+EPOCHS = 200  # Number of training epochs
+DISTANCE_THRESHOLD = 2.0  # Distance threshold for filtering data
 
 
 
@@ -42,7 +43,7 @@ def define_model(trial,input_dim, output_dim):
         nn.Sequential: A PyTorch sequential model.
     """
     # Optimize the number of layers, hidden units, and dropout ratio
-    n_layers = trial.suggest_int("n_layers", 2, 4)
+    n_layers = trial.suggest_int("n_layers", 2, 5)
     layers = []
 
     in_features = input_dim  # Input size for FashionMNIST (28x28 images)
@@ -50,7 +51,7 @@ def define_model(trial,input_dim, output_dim):
     for i in range(n_layers):
         # Suggest the number of units in the current layer
         #out_features = trial.suggest_int("hidden_dim_{}".format(i), 32, 512)
-        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [128, 256, 512, 1024, 2048])
+        out_features = trial.suggest_categorical("hidden_dim_{}".format(i), [64, 128, 256, 512, 1024, 2048])
         #print(f"Layer {i}: {in_features} -> {out_features}")
         layers.append(nn.Linear(in_features, out_features))
         
@@ -65,9 +66,9 @@ def define_model(trial,input_dim, output_dim):
 
         # Suggest the dropout rate for the current layer
         #p = trial.suggest_float("dropout_l{}".format(i), 0.0, 0.3)
-        p = trial.suggest_categorical("dropout_l{}".format(i), [0.0, 0.05, 0.1, 0.15, 0.2])
+        #p = trial.suggest_categorical("dropout_l{}".format(i), [0.0, 0.05, 0.1, 0.15, 0.2])
 
-        layers.append(nn.Dropout(p))
+        #layers.append(nn.Dropout(p))
 
         in_features = out_features  # Update input size for the next layer
 
@@ -81,7 +82,7 @@ def define_model(trial,input_dim, output_dim):
 
 def get_mnist(trial):
     """
-    Load the FashionMNIST dataset.
+    Load the dataset.
 
     Returns:
         tuple: Training and validation data loaders.
@@ -89,14 +90,14 @@ def get_mnist(trial):
     # split data into training and validation sets
     csv_file = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures/echolocation-wide-long-all/features_all_normalized.csv")
     dataset_root_directory = os.path.join("./Echolocation/Data/dataset/echolocation-wide-long-all")
-    distance = 2.0 #4.95  # Distance threshold for filtering data
+    distance = DISTANCE_THRESHOLD #4.95  # Distance threshold for filtering data
     data = prepare_dataset(csv_file, dataset_root_directory, distance)
 
     X, Y, sample_ids, original_distances = data
     splits = split_data(X, Y, original_distances, sample_ids)
     train_dataset, val_dataset, test_dataset, *split_info = splits
     
-    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128])
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128, 256, 512])
     #batch_size = trial.suggest_int("batch_size", 32, 128)
 
     # Load training data
@@ -202,7 +203,7 @@ def objective(trial):
 if __name__ == "__main__":
     # Create an Optuna study to maximize validation accuracy
     study = optuna.create_study(direction="minimize", study_name="Echolocation_Regressor_Study")
-    study.optimize(objective, n_trials=1, timeout=None, show_progress_bar=True, n_jobs=1)  # Run optimization for 100 trials or 600 seconds
+    study.optimize(objective, n_trials=200, timeout=None, show_progress_bar=True, n_jobs=1)  # Run optimization for 100 trials or 600 seconds
 
     # Get statistics about the study
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])

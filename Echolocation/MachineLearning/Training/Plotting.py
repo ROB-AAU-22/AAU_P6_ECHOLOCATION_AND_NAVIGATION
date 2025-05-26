@@ -4,7 +4,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Process, Queue, cpu_count
-from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, PLOT_DPI, CLASSIFICATION_THRESHOLD
+from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLDS, PLOT_DPI, CLASSIFICATION_THRESHOLD
 DPI = PLOT_DPI
 
 def polar_to_cartesian(distances, angle_range=(-3*np.pi/4, 3*np.pi/4)):
@@ -74,13 +74,13 @@ def plot_worker(queue, worker_id):
             if task_type == 'cartesian':
                 #print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
                 #gt_x, gt_y = polar_to_cartesian(Y_true_i)
-                gt_x, gt_y = polar_to_cartesian(classifications_i)
+                gt_x, gt_y = polar_to_cartesian(original_gt_i)
                 pred_x, pred_y = polar_to_cartesian(Y_pred_i)
                 ignored_gt = original_gt_i > distance
 
                 ignored_gt_x, ignored_gt_y = polar_to_cartesian(original_gt_i)
                 ax.scatter(ignored_gt_x[ignored_gt], ignored_gt_y[ignored_gt], color='red', marker='o', label='GT Ignored', alpha=0.7, zorder=1)
-                ax.scatter(gt_x, gt_y, label="GT LiDAR", marker='o', alpha=0.7, zorder=2)
+                ax.scatter(gt_x[~ignored_gt], gt_y[~ignored_gt], label="GT LiDAR", marker='o', alpha=0.7, zorder=2)
 
                 robot_circle = plt.Circle((0, 0), 0.2, color='gray', fill=True, alpha=0.5, label='Robot', zorder=2)
                 ax.add_patch(robot_circle)
@@ -173,7 +173,7 @@ def start_multiprocessing_plotting(Y_true, Y_pred, classifications, original_dis
 
     for i in range(len(Y_true)):
         task_queue.put(('cartesian', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, cartesian_folder, best_threshold, chosen_dataset, ids[i], distance)))
-        task_queue.put(('scan_index', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, scan_index_folder, best_threshold, chosen_dataset, ids[i], distance)))
+        #task_queue.put(('scan_index', (i, Y_true[i], Y_pred[i], classifications[i], original_distances_test[i], num_epochs, num_layers, scan_index_folder, best_threshold, chosen_dataset, ids[i], distance)))
 
     for _ in range(num_workers):
         task_queue.put(None)
