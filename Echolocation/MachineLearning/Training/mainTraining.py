@@ -2,6 +2,7 @@ import os
 import time
 import csv
 import numpy as np
+import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -289,8 +290,10 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
     sample_ids_test, original_distances_test, Y_test, original_distances_train, original_distances_val = split_info
     best_threshold = CLASSIFICATION_THRESHOLD
     predicted_test, ground_truth_test = evaluate_regressor(reg_results['model'], reg_results['test_loader'], device)
+    
+    class_test_dataset = ClassifierDataset(predicted_test, ground_truth_test)
     classifications, classifications_true, classifcation_list, classifcation_true_list, classifciation_preds_score = evaluate_classifier(
-        cls_results['model'], device, predicted_test, ground_truth_test, cls_results['hyperparams']['batch_size'])
+        cls_results['model'], device, DataLoader(class_test_dataset, cls_results['hyperparams']['batch_size'], True), distance)
 
     metrics_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, distance_folder, "evaluation_metrics")
     os.makedirs(metrics_folder, exist_ok=True)
@@ -363,6 +366,35 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
         writer = csv.writer(f)
         writer.writerow(header)
         writer.writerow([chosen_dataset, "all", cls_results['val_loss'], mean_mae, mean_rmse, mean_mre])
+    
+    # save best regressor and classifier loss to json file
+    
+    # Calculate test loss for regressor
+    regressor_test_loss = MaskedMSELoss()(predicted_test, ground_truth_test).item()
+
+    # Calculate test loss for classifier
+    class_test_loader = DataLoader(class_test_dataset, cls_results['hyperparams']['batch_size'], shuffle=False)
+    cls_results['model'].eval()
+    with torch.no_grad():
+        test_class_loss = 0.0
+        total = 0
+        for x, y in class_test_loader:
+            x, y = x.to(device), y.to(device)
+            outputs = cls_results['model'](x)
+            loss = nn.BCELoss()(outputs, y)
+            test_class_loss += loss.item() * x.size(0)
+            total += x.size(0)
+        classifier_test_loss = test_class_loss / total if total > 0 else 0.0
+
+    # Save test losses to JSON
+    test_losses = {
+        "regressor_test_loss": regressor_test_loss,
+        "classifier_test_loss": classifier_test_loss,
+        "classifier_accuracy": accuracy,
+    }
+    test_losses_file = os.path.join(metrics_folder, "test_losses.json")
+    with open(test_losses_file, 'w') as f:
+        json.dump(test_losses, f, indent=4)
 
     print("Model evaluation and saving complete.")
 

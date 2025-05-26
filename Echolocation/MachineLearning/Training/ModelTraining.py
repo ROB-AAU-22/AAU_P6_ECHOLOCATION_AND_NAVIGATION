@@ -310,7 +310,7 @@ def evaluate_regressor(model, dataloader, device):
             targets_list.append(Y_batch)
     return torch.cat(preds_list), torch.cat(targets_list)
 
-def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
+def evaluate_classifier(model, device, dataloader, distance):
     """
     Evaluates the performance of a classifier model on validation data.
     Args:
@@ -331,8 +331,8 @@ def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
     model.eval()
     #print(f"predicted_val: {predicted_val}")
     #print(f"y_val_labels: {y_val_labels}")
-    data = [predicted_val, y_val_labels]
-    dataloader = DataLoader(data, batch_size, shuffle=False)
+    #data = [predicted_val, y_val_labels]
+    #dataloader = DataLoader(data, batch_size, shuffle=False)
     preds_list = []
     targets_list = []
     with torch.no_grad():
@@ -341,10 +341,12 @@ def evaluate_classifier(model, device, predicted_val, y_val_labels, batch_size):
             outputs = model(Xb).cpu()
             preds_list.append(outputs)
             targets_list.append(Yb)
-    y_val_preds = outputs.numpy()
+    #y_val_preds = outputs.numpy()
+    y_val_preds = np.concatenate(preds_list).flatten()
+    y_val_labels = np.concatenate(targets_list).flatten()
     #y_val_labels_flat = ~np.isnan(y_val_labels.cpu().numpy())
     #y_val_labels_thresholded = (y_val_labels_flat).astype(int)
-    y_val_labels_thresholded = (y_val_labels.cpu().numpy() < 2.0).astype(int)
+    y_val_labels_thresholded = (y_val_labels.numpy() < distance).astype(int)
 
     y_val_preds_thresholded = (y_val_preds>CLASSIFICATION_THRESHOLD).astype(int)
     
