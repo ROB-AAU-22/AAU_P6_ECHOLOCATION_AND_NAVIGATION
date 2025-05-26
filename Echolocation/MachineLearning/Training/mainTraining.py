@@ -290,7 +290,7 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
     best_threshold = CLASSIFICATION_THRESHOLD
     predicted_test, ground_truth_test = evaluate_regressor(reg_results['model'], reg_results['test_loader'], device)
     classifications, classifications_true, classifcation_list, classifcation_true_list, classifciation_preds_score = evaluate_classifier(
-        cls_results['model'], device, predicted_test, ground_truth_test, cls_results['hyperparams']['batch_size'])
+        cls_results['model'], device, predicted_test, ground_truth_test, cls_results['hyperparams']['batch_size'], distance)
 
     metrics_folder = os.path.join("./Echolocation/FeatureExtraction/ExtractedFeatures", chosen_dataset, dataset_iter, distance_folder, "evaluation_metrics")
     os.makedirs(metrics_folder, exist_ok=True)
@@ -364,6 +364,19 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
         writer.writerow(header)
         writer.writerow([chosen_dataset, "all", cls_results['val_loss'], mean_mae, mean_rmse, mean_mre])
 
+    # save regression and classification losses to JSON file
+    losses = {
+        "distance"  : distance,
+        "regression_loss"   : reg_results['val_loss'],
+        "classification_loss"   : cls_results['val_loss'],
+        "classification_f1" : f1,
+    }
+    losses_file = os.path.join(metrics_folder, "losses.json")
+    with open(losses_file, 'w') as f:
+        import json
+        json.dump(losses, f, indent=4)
+        
+    
     print("Model evaluation and saving complete.")
 
 
