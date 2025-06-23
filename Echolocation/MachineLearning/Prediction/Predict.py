@@ -206,12 +206,12 @@ def main_predict():
     DPI = 200
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     time_stamp = time.strftime("%d-%m_%H-%M-%S")
-    model_lidar, hyperparams_lidar = load_model_regressor(device, r"C:/GitHub/AAU_P6_ECHOLOCATION_AND_NAVIGATION/Echolocation/Models/2.0m_threshold/echolocation-wide-long-all_200_2_model_regressor.pth")
-    model_classifier, hyperparams_classifier = load_model_classifier(device, r"C:/GitHub/AAU_P6_ECHOLOCATION_AND_NAVIGATION/Echolocation/Models/2.0m_threshold/echolocation-wide-long-all_200_model_classifier.pth")
+    model_lidar, hyperparams_lidar = load_model_regressor(device, r"Echolocation/Models/2.0m_threshold/echolocation-wide-long-all_200_2_model_regressor.pth")
+    model_classifier, hyperparams_classifier = load_model_classifier(device, r"Echolocation/Models/2.0m_threshold/echolocation-wide-long-all_200_model_classifier.pth")
     #input_features = load_single_row_from_csv(r"Echolocation\FeatureExtraction\ExtractedFeatures\echolocation-wide-long-all\features_all_normalized.csv", 96)
-    features = list(FeatureExtractionScript.exstract_single_features_from_wav(r"E:/all test results/distance estimation test/1 - 0.6 meters/14-05_09-07-10/data/wav").values())
+    features = list(FeatureExtractionScript.exstract_single_features_from_wav(r"Echolocation/MachineLearning/Prediction/14-05_09-07-10/data/wav.wav").values())
     #features = list(FeatureExtractionScript.exstract_single_features_from_wav(r"/home/volle/catkin_ws/Echolocation/Data/dataset/echolocation-wide-long-all/1744893392_33_Wide_Long/1744893392_33_Wide_Long_sound.wav").values())
-    lidar_file = "E:/all test results/distance estimation test/1 - 0.6 meters/14-05_09-07-10/LiDAR/LiDAR_true.json"
+    lidar_file = "Echolocation/MachineLearning/Prediction/14-05_09-07-10/LiDAR/LiDAR_true.json"
     #lidar_file = "/home/volle/catkin_ws/Echolocation/Data/dataset/echolocation-wide-long-all/1744893392_33_Wide_Long/1744893392_33_Wide_Long_distance_data.json"
     with open(lidar_file, "r") as f:
         lidar_data = json.load(f)
@@ -268,7 +268,7 @@ def main_predict():
     # wav
     wav_path = os.path.join(output_path, "data", "wav.wav")
     os.makedirs(os.path.join(output_path, "data"), exist_ok=True)
-    stereo_signal, sr = sf.read("E:/all test results/distance estimation test/1 - 0.6 meters/14-05_09-07-10/data/wav", dtype="float32")
+    stereo_signal, sr = sf.read("Echolocation/MachineLearning/Prediction/14-05_09-07-10/data/wav.wav", dtype="float32")
     write(wav_path, sr, stereo_signal)
     
     plot_cartisian(lidar_vector, predictions, predicrions_classefied, 2.0, DPI, time_stamp)

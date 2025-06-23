@@ -5,3 +5,5 @@
 /Echolocation/Models
 /Echolocation/Models
 *.pth
+/Echolocation/Data/Echolocation_all_test_results
+/Echolocation/MachineLearning/Prediction/output
