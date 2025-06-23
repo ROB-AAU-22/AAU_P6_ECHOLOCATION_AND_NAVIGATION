@@ -108,7 +108,7 @@ def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_T
             # Apply distance threshold, replacing values above it with NaN
             if DISTANCE_THRESHOLD_ENABLED:
                 lidar_vector[lidar_vector > (distance_threshold)] = np.nan
-                #lidar_vector[lidar_vector > (distance_threshold)] = 2.1
+                #lidar_vector[lidar_vector > (distance_threshold)] = distance_threshold + 0.1
 
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")

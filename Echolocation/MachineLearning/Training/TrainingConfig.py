@@ -3,7 +3,7 @@
 # Hyperparameters and configuration settings
 DISTANCE_THRESHOLD_ENABLED = True
 DISTANCE_THRESHOLD = 2
-DISTANCE_THRESHOLDS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 4.95]
+DISTANCE_THRESHOLDS = [2.0]#[1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 4.95]
 
 # Configuration for regressor
 # Configuration for regressor
