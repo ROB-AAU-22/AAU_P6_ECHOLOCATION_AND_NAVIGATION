@@ -348,7 +348,7 @@ def evaluate_and_save_results(reg_results, cls_results, test_dataset, split_info
         f.write(f"\n  Best Threshold: {thresholds}\n")
     
 
-    if True:
+    if False:
         start_multiprocessing_plotting(ground_truth_test, predicted_test, classifcation_list, original_distances_test,
                                     NUM_EPOCHS, reg_results['hyperparams']['num_layers'], cartesian_folder,
                                     scan_index_folder, CLASSIFICATION_THRESHOLD, dataset_iter, sample_ids_test, distance)

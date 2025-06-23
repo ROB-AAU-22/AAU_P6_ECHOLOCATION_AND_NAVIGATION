@@ -217,7 +217,9 @@ def validate_one_epoch_classifier(model, val_loader, loss_fn, device):
             val_loss.append(loss.item())
 
     val_preds = np.concatenate(val_preds).flatten()
+    print(f"val_preds: {val_preds}")
     val_labels = np.concatenate(val_labels).flatten()
+    print(f"val_labels: {val_labels}")
     avg_val_loss = np.mean(val_loss)
     return avg_val_loss, val_preds, val_labels
 

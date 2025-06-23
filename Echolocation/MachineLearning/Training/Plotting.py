@@ -73,8 +73,9 @@ def plot_worker(queue, worker_id):
             fig, ax = plt.subplots(figsize=(8, 8) if task_type == 'cartesian' else (10, 6), dpi=DPI)
             if task_type == 'cartesian':
                 #print(f"Worker {worker_id} plotting cartesian LiDAR for sample {i}...")
-                #gt_x, gt_y = polar_to_cartesian(Y_true_i)
-                gt_x, gt_y = polar_to_cartesian(classifications_i)
+                gt_x, gt_y = polar_to_cartesian(Y_true_i)
+                #gt_x, gt_y = polar_to_cartesian(original_gt_i)
+                #gt_x, gt_y = polar_to_cartesian(classifications_i)
                 pred_x, pred_y = polar_to_cartesian(Y_pred_i)
                 ignored_gt = original_gt_i > distance
 

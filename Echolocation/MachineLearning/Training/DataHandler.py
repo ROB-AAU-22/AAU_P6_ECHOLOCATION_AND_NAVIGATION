@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
-from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, DISTANCE_THRESHOLD_ENABLED
+from MachineLearning.Training.TrainingConfig import DISTANCE_THRESHOLD, DISTANCE_THRESHOLD_ENABLED, NANEXCEPTION
 
 
 def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_THRESHOLD):
@@ -107,8 +107,10 @@ def build_dataset_from_csv(csv_file, dataset_root, distance_threshold=DISTANCE_T
             original_distances.append(lidar_vector.copy())
             # Apply distance threshold, replacing values above it with NaN
             if DISTANCE_THRESHOLD_ENABLED:
-                lidar_vector[lidar_vector > (distance_threshold)] = np.nan
-                #lidar_vector[lidar_vector > (distance_threshold)] = distance_threshold + 0.1
+                if NANEXCEPTION:
+                    lidar_vector[lidar_vector > (distance_threshold)] = np.nan
+                else:
+                    lidar_vector[lidar_vector > (distance_threshold)] = distance_threshold + 1
 
         except Exception as e:
             print(f"Error loading LiDAR file {lidar_file}: {e}. Skipping sample {filename}.")
@@ -132,7 +134,8 @@ class ClassifierDataset(torch.utils.data.Dataset):
         #print(f"train preds: {predicted_distances}")
         #print(f"train targets: {original_distances}")
         self.X = np.float32(predicted_distances)#.float()
-        self.Y = np.float32(~np.isnan(original_distances))#.float()
+        #self.Y = np.float32(~np.isnan(original_distances))#.float()
+        self.Y = np.float32((original_distances < DISTANCE_THRESHOLD))#.float()
         #self.Y = original_distances  # .float()
 
 
